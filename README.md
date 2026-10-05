@@ -1,7 +1,8 @@
 # VAST Builders Challenge: Video Agents
 
-Before today, see [BEFORE_YOU_BUILD.md](BEFORE_YOU_BUILD.md) for what to do in advance.
-([PDF](docs/BEFORE_YOU_BUILD.pdf) · [this guide as PDF](docs/BUILD_DAY.pdf), in case GitHub is down.)
+Before today, see [BEFORE_YOU_BUILD.md](BEFORE_YOU_BUILD.md) for what to do in advance. If you want the PDF version, [click here](docs/BEFORE_YOU_BUILD.pdf).
+
+If you want the PDF version of the Build Day guide, [click here](docs/BUILD_DAY.pdf).
 
 Spend the day building with video:
 
@@ -49,9 +50,6 @@ To load the VM, click on `Open Desktop`:
 Form your team and sit together first, decide on who's launching a VM before
 selecting your assigned team number.
 
-> ⚠️ **IMPORTANT:** First create a team if you haven't. If you are on a team and waiting
-> to be assigned a team number, form your team through <a href="https://discord.com/invite/VyhUqgn6pc" target="_blank" rel="noopener">tokens&'s Discord</a>.
->
 > Ensure you select the assigned team (e.g. `team-1`) so all team members access
 > the same video ingestion pipeline.
 
@@ -303,7 +301,7 @@ The skills used by Cursor can be used by agent frameworks too. They follow the s
 
 ## 6. Demos
 
-Stay tuned for submission instructions from the tokens& team.
+Submissions will start around 4:30pm. Instructions here: <a href="https://tokensand.com/vastnyc" target="_blank" rel="noopener">https://tokensand.com/vastnyc</a>.
 
 We'll do a first round of judging with each team to walk through what you built and to hear how the day went.
 
