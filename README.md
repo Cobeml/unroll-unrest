@@ -303,7 +303,7 @@ The skills used by Cursor can be used by agent frameworks too. They follow the s
 
 ## 6. Demos
 
-Stay tuned for submission instructions from the <a href="https://tokensand.com/vastnyc" target="_blank" rel="noopener">tokens& team</a>.
+Stay tuned for submission instructions from the tokens& team.
 
 We'll do a first round of judging with each team to walk through what you built and to hear how the day went.
 
