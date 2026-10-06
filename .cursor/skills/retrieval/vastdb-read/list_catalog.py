@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""List VastDB databases, schemas, and tables via the vastdb Python SDK only."""
+"""List VastDB schemas/tables via the vastdb Python SDK (this team's bucket by default)."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import sys
-import urllib.error
-import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -23,7 +21,14 @@ def _team_config() -> Path:
     return configs[0]
 
 
-ENV_PATH = Path(os.environ.get("VAST_ENV_FILE", _team_config()))
+def _config_path() -> Path:
+    override = os.environ.get("VAST_ENV_FILE")
+    if override:
+        return Path(override)
+    return _team_config()
+
+
+ENV_PATH = _config_path()
 
 INTERNAL_TABLES = frozenset({"tabular_schema_table"})
 
@@ -54,30 +59,27 @@ def resolve_endpoint(env: dict[str, str]) -> str:
         or env.get("S3_ENDPOINT", "")
     )
     if not endpoint:
-        print("Set VDB_ENDPOINT or S3_ENDPOINT in /config/<team>.config", file=sys.stderr)
+        print(
+            "Set S3_ENDPOINT (data VIP) in /config/<team>.config "
+            "(or VDB_ENDPOINT / env override)",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return normalize_endpoint(endpoint)
 
 
-def probe_endpoint(endpoint: str) -> None:
-    """Warn if localhost tunnel port is not reachable."""
-    if "127.0.0.1" not in endpoint and "localhost" not in endpoint:
-        return
-    try:
-        urllib.request.urlopen(endpoint, timeout=5)
-    except urllib.error.HTTPError:
-        return  # HTTP 404/200 both mean tunnel is up
-    except OSError as exc:
-        print(
-            f"Cannot reach {endpoint} — start SSH tunnel first:\n"
-            f"  ssh -N -f -L 18080:172.27.121.1:80 vastdata@v151lg1",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
 def parse_path_parts(parent_path: str) -> list[str]:
     return [p for p in parent_path.strip("/").split("/") if p]
+
+
+def die_forbidden(bucket: str, err: BaseException) -> None:
+    print(
+        f"403/denied on bucket {bucket!r}: {err}\n"
+        "Identity policy still applies (JWT API is not the ACL). "
+        "Use this team's VASTDB_BUCKET only.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def catalog_tree(endpoint: str, access: str, secret: str) -> dict[str, dict[str, list[str]]]:
@@ -91,19 +93,22 @@ def catalog_tree(endpoint: str, access: str, secret: str) -> dict[str, dict[str,
         catalog = tx.catalog(fail_if_missing=False)
         if catalog is None:
             return {}
+        rows = catalog.select(columns=["element_type", "name", "parent_path"]).read_all().to_pylist()
 
-        df = catalog.select(columns=["element_type", "name", "parent_path"]).read_all().to_pandas()
-
-    for _, row in df[df["element_type"] == "SCHEMA"].iterrows():
-        parts = parse_path_parts(row["parent_path"])
+    for row in rows:
+        if row.get("element_type") != "SCHEMA":
+            continue
+        parts = parse_path_parts(row.get("parent_path") or "")
         if len(parts) != 1:
             continue
-        tree[parts[0]][row["name"]]  # ensure schema key exists
+        tree[parts[0]][row["name"]]
 
-    for _, row in df[df["element_type"] == "TABLE"].iterrows():
-        if row["name"] in INTERNAL_TABLES:
+    for row in rows:
+        if row.get("element_type") != "TABLE":
             continue
-        parts = parse_path_parts(row["parent_path"])
+        if row.get("name") in INTERNAL_TABLES:
+            continue
+        parts = parse_path_parts(row.get("parent_path") or "")
         if len(parts) != 2:
             continue
         bucket, schema = parts
@@ -111,13 +116,16 @@ def catalog_tree(endpoint: str, access: str, secret: str) -> dict[str, dict[str,
         if row["name"] not in tables:
             tables.append(row["name"])
 
-    return {db: {sch: sorted(tables) for sch, tables in sorted(schemas.items())} for db, schemas in sorted(tree.items())}
+    return {
+        db: {sch: sorted(tables) for sch, tables in sorted(schemas.items())}
+        for db, schemas in sorted(tree.items())
+    }
 
 
 def live_bucket_tree(
     endpoint: str, access: str, secret: str, bucket: str
 ) -> dict[str, dict[str, list[str]]]:
-    """Optional live drill-down via bucket.schemas() / schema.tables() (SDK only)."""
+    """Live drill-down via bucket.schemas() / schema.tables()."""
     import vastdb
     from vastdb.errors import Conflict
 
@@ -128,6 +136,11 @@ def live_bucket_tree(
             schemas = list(tx.bucket(bucket).schemas())
         except Conflict:
             return {}
+        except Exception as e:
+            msg = str(e)
+            if "403" in msg or "Forbidden" in msg or "AccessDenied" in msg:
+                die_forbidden(bucket, e)
+            raise
 
         for schema in schemas:
             tables = []
@@ -140,7 +153,7 @@ def live_bucket_tree(
 
 def print_tree(tree: dict[str, dict[str, list[str]]]) -> None:
     if not tree:
-        print("No VastDB databases found in catalog.")
+        print("No VastDB databases/schemas found.")
         return
 
     print(f"{'DATABASE (bucket)':<40} {'SCHEMA':<30} TABLES")
@@ -159,37 +172,40 @@ def print_tree(tree: dict[str, dict[str, list[str]]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="List VastDB catalog via vastdb SDK")
-    parser.add_argument("--bucket", help="Also verify one bucket via bucket.schemas()")
-    parser.add_argument("--live-only", action="store_true", help="Use bucket.schemas() only (requires --bucket)")
+    parser.add_argument(
+        "--bucket",
+        help="Bucket to list (default: VASTDB_BUCKET from team config)",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="List every database in tx.catalog() (other teams may 403)",
+    )
     args = parser.parse_args()
 
     env = load_env(ENV_PATH)
     access = env.get("VAST_ACCESS_KEY") or env.get("ACCESS_KEY", "")
     secret = env.get("VAST_SECRET_KEY") or env.get("SECRET_KEY", "")
     if not access or not secret:
-        print(
-            "Set ACCESS_KEY/SECRET_KEY in /config/<team>.config",
-            file=sys.stderr,
-        )
+        print("Set ACCESS_KEY/SECRET_KEY in /config/<team>.config", file=sys.stderr)
         sys.exit(1)
 
     endpoint = resolve_endpoint(env)
-    probe_endpoint(endpoint)
     print(f"VastDB endpoint: {endpoint}\n")
 
-    if args.live_only:
-        if not args.bucket:
-            print("--live-only requires --bucket", file=sys.stderr)
-            sys.exit(1)
-        print_tree(live_bucket_tree(endpoint, access, secret, args.bucket))
+    own_bucket = env.get("VASTDB_BUCKET", "")
+    bucket = args.bucket or own_bucket
+
+    if args.all:
+        tree = catalog_tree(endpoint, access, secret)
+        print_tree(tree)
         return
 
-    tree = catalog_tree(endpoint, access, secret)
-    print_tree(tree)
+    if not bucket:
+        print("Set VASTDB_BUCKET in team config, or pass --bucket / --all", file=sys.stderr)
+        sys.exit(1)
 
-    if args.bucket:
-        print(f"\n--- live bucket.schemas() for {args.bucket} ---")
-        print_tree(live_bucket_tree(endpoint, access, secret, args.bucket))
+    print_tree(live_bucket_tree(endpoint, access, secret, bucket))
 
 
 if __name__ == "__main__":

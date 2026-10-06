@@ -4,7 +4,8 @@ description: >-
   Deploy a custom hackathon app on top of VSS onto Kubernetes (not local) in the
   team's namespace without Docker build/push — public image (python:3.12-slim),
   app code from a ConfigMap, VSS credentials from a Secret, exposed via Ingress
-  at path /app on the team's existing host (video-lab-team-<N>.cosmos.vastdata.com).
+  at path /app on the team's existing host. Tell users to open
+  https://workshop.thecosmoslabs.com and click the App button.
   Use when participants want a mini-app / ops board / API on their archive but
   the VM has no Docker or registry access.
 ---
@@ -26,13 +27,18 @@ This is **not** a custom-built app image — code is mounted at runtime.
 | Rule | Detail |
 |------|--------|
 | **Must run on K8s** | Deployment in the team's namespace. Do not ship a local Flask/Node server, `python -m http.server`, or “open localhost” as the app. |
-| **Must use Ingress** | Public URL is the team host + path `/app`. |
-| **One host per team** | Same host as the VSS UI: `video-lab-team-<N>.cosmos.vastdata.com` (from `$INGRESS_URL`). |
+| **Must use Ingress** | Path `/app` on the team Ingress host. |
+| **One host per team** | Ingress host is `video-lab-team-<N>.cosmos.vastdata.com` (from `$USERNAME`, e.g. `team-11` → `11`). |
 | **Path is `/app`** | Always. Do not invent a new hostname or use `/` (that is the VSS UI). |
+| **External URL for humans** | [https://workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com) → **App** button. Not `$INGRESS_URL`. |
 
-Example: team-17 → `http://video-lab-team-17.cosmos.vastdata.com/app`
+## How to open the app
 
-The skill only needs **this team's** `/config/<team>.config` — never other teams.
+After deploy, tell the user to go to
+[https://workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com)
+and click the **App** button.
+
+Do not send them to `$INGRESS_URL` (internal VSS API).
 
 ## When to use
 
@@ -57,16 +63,12 @@ set -a && source "$TEAM_CONFIG" && set +a
 # Namespace = this team only (e.g. team-17). Confirm with the user if unclear.
 NS="$USERNAME"
 
-# Host from this team's INGRESS_URL — do not invent another hostname.
-APP_HOST="${INGRESS_URL#http://}"
-APP_HOST="${APP_HOST#https://}"
-APP_HOST="${APP_HOST%%/*}"
-# Public app URL (fixed path):
-#   http://${APP_HOST}/app
+# Ingress host (cluster). Users open the workshop App button, not this URL.
+TEAM_N="${USERNAME#team-}"
+APP_HOST="video-lab-team-${TEAM_N}.cosmos.vastdata.com"
 ```
 
-Credentials and `INGRESS_URL` come only from `/config/<team>.config`. Never search
-the repo's `team-configs/`, echo passwords, or commit secrets.
+`$INGRESS_URL` from `/config/<team>.config` is only for the app's **backend** calls (`VSS_URL`).
 
 The app calls the existing VSS backend at `$INGRESS_URL` (see `retrieval/login`,
 `retrieval/search`, etc.) — do not redeploy the VSS stack for a demo app.
@@ -78,7 +80,7 @@ The app calls the existing VSS backend at `$INGRESS_URL` (see `retrieval/login`,
 - [ ] 2. Create ConfigMap from app code
 - [ ] 3. Create Secret from team VSS creds
 - [ ] 4. Apply Deployment + Service + Ingress (host=$APP_HOST, path=/app)
-- [ ] 5. Verify pod Running + curl http://$APP_HOST/app
+- [ ] 5. Verify pod Running + curl http://$APP_HOST/app (cluster check; users use workshop)
 ```
 
 ### 1. App layout
@@ -95,8 +97,9 @@ tools/my-app/
 App reads VSS URL + credentials from env (injected from the Secret), logs in once,
 then calls retrieval APIs with the JWT. Prefer `requests` / stdlib; avoid heavy deps.
 
-Serve internally at `/` and `/health`. Ingress rewrites `/app` → `/` so browsers hit
-`http://$APP_HOST/app` without the app needing a `/app` prefix in code.
+Serve internally at `/` and `/health`. Ingress rewrites `/app` → `/`.
+Users open the app at [https://workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com)
+via the **App** button — not via `$INGRESS_URL`.
 
 **ConfigMap limits:** total data ≈ 1 MiB. No large models, videos, or `node_modules`.
 
@@ -235,7 +238,8 @@ spec:
 EOF
 ```
 
-Public URL: `http://${APP_HOST}/app` (and `…/app/health` → container `/health`).
+Ingress is on `$APP_HOST` path `/app` (workshop **App** button uses this).
+Users open [https://workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com) → **App**.
 
 Do **not** create a second hostname for the app. Do **not** use path `/` (conflicts
 with the VSS frontend Ingress on the same host).
@@ -254,8 +258,9 @@ curl -sS -o /dev/null -w "%{http_code}\n" "http://${APP_HOST}/app"
 curl -sS "http://${APP_HOST}/app/health"
 ```
 
-Report the URL `http://${APP_HOST}/app` to the user. If that fails, fix the Ingress /
-pod — do not fall back to a local server as the demo.
+Tell the user to open [https://workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com)
+and click the **App** button. Do **not** tell them to open `$INGRESS_URL`. If the
+workshop App view fails, fix the Ingress / pod — do not fall back to a local server.
 
 ## Update loop
 
@@ -270,7 +275,7 @@ pod — do not fall back to a local server as the demo.
 | Issue | What to do |
 |-------|------------|
 | Tempted to run locally | Refuse — deploy to K8s + Ingress `/app` only. |
-| New hostname for the app | Wrong — reuse `$APP_HOST` from `$INGRESS_URL`. |
+| New hostname for the app | Wrong — Ingress host is `video-lab-team-<N>.cosmos.vastdata.com`. |
 | Ingress path `/` or random path | Wrong — path must be `/app`. |
 | `ImagePullBackOff` | Cluster must pull Docker Hub; ask organizers if blocked. |
 | ConfigMap too large | Trim assets; stay under ~1 MiB. |
@@ -282,9 +287,9 @@ pod — do not fall back to a local server as the demo.
 ## Agent instructions
 
 1. Deliverable is **on-cluster** via Ingress — never a local-only app.
-2. Resolve `NS`, `INGRESS_URL` → `APP_HOST`, and creds from the single `/config/*.config` for **this team only**.
+2. Resolve `NS` from `$USERNAME`. Set Ingress host to `video-lab-team-<N>.cosmos.vastdata.com`. Use `$INGRESS_URL` only as `VSS_URL` (internal API).
 3. Ingress host = `$APP_HOST`, path = `/app` (with nginx rewrite). No other host/path.
 4. Generate a small app (`main.py` + optional `requirements.txt`) that authenticates to VSS and implements the use case; keep internal routes at `/`.
-5. Apply ConfigMap → Secret → Deployment/Service/Ingress; prove `http://$APP_HOST/app`.
+5. Apply ConfigMap → Secret → Deployment/Service/Ingress; prove the pod/Ingress is healthy.
 6. On code edits: update ConfigMap + `rollout restart`. Do not suggest `docker build`/`push`.
-7. Tell the user the final URL: `http://video-lab-team-<N>.cosmos.vastdata.com/app`.
+7. Tell the user to open https://workshop.thecosmoslabs.com and click the **App** button. That is the external URL. Do not point them at `$INGRESS_URL`.

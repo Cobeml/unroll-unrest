@@ -46,7 +46,8 @@ Query the indexed archive through the backend API (`/api/v1`). Most routes need 
 | [suggest-prompts](skills/retrieval/suggest-prompts/SKILL.md) | AI-generated search prompt suggestions |
 | [videos](skills/retrieval/videos/SKILL.md) | Browse, play back, and summarize a video |
 | [agent-qa](skills/retrieval/agent-qa/SKILL.md) | Natural-language Q&A over the archive |
-| [vastdb-read](skills/retrieval/vastdb-read/SKILL.md) | Raw VastDB inspection (bypasses the API) |
+| [vastdb-read](skills/retrieval/vastdb-read/SKILL.md) | Raw VastDB catalog + select (data VIP / optional QE) |
+| [vastdb-write](skills/retrieval/vastdb-write/SKILL.md) | Create schemas/tables + insert (data VIP only) |
 
 → [retrieval/README.md](skills/retrieval/README.md)
 
@@ -83,4 +84,6 @@ Shared endpoint addresses are documented in [gpu/README.md](skills/gpu/README.md
 
 **Watch a result** → `login` → `videos`
 
-**Hackathon mini-app (no Docker)** → write small app → `deployment/deploy-app-no-registry` → `http://video-lab-team-<N>.cosmos.vastdata.com/app`
+**VastDB custom tables** → `vastdb-write` (create/insert on data VIP) → `vastdb-read` (select)
+
+**Hackathon mini-app (no Docker)** → write small app → `deployment/deploy-app-no-registry` → [workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com) → **App**

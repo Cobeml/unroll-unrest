@@ -17,7 +17,8 @@ Resolve `INGRESS_URL`, `USERNAME`, and `PASSWORD` from the single
 | [suggest-prompts](suggest-prompts/SKILL.md) | `GET /suggestions` |
 | [videos](videos/SKILL.md) | `/videos/explore`, `/stream`, `/playback-url`, `/detections`, `/metadata`, `POST /videos/synthesize` |
 | [agent-qa](agent-qa/SKILL.md) | `POST /agent/ask`, `/agent/search-and-answer`, `tools/*` |
-| [vastdb-read](vastdb-read/SKILL.md) | raw VastDB via Python SDK + SSH tunnel (bypasses backend) |
+| [vastdb-read](vastdb-read/SKILL.md) | raw VastDB catalog + select via SDK (data VIP from `S3_ENDPOINT`; optional QE from K8s secret) |
+| [vastdb-write](vastdb-write/SKILL.md) | create schema/table + insert via SDK (data VIP only) |
 
 ## Auth pattern
 
