@@ -1,6 +1,6 @@
 # VAST Builders Challenge: Video Agents
 
-Before today, see [BEFORE_YOU_BUILD.md](BEFORE_YOU_BUILD.md) for what to do in advance. If you want the PDF version, [click here](docs/BEFORE_YOU_BUILD.pdf).
+> 💡 Before today, see [BEFORE_YOU_BUILD.md](BEFORE_YOU_BUILD.md) for what to do in advance. If you want the PDF version, [click here](docs/BEFORE_YOU_BUILD.pdf).
 
 If you want the PDF version of the Build Day guide, [click here](docs/BUILD_DAY.pdf).
 
@@ -34,9 +34,9 @@ serving. You build something cool that searches and acts.
 
 > 💡 We want to make sure everyone can access the environment, so VM connections per team
 > are limited: max 2 people per team can launch a VM. If two teammates already have a VM
-> running, follow along with them.
+> running, pair with them.
 
-<a href="https://community.vastdata.com/t/about-the-workshop-category/1969?utm_campaign=event26-builders-challenge" target="_blank" rel="noopener">Visit and join Cosmos</a> to ask questions and access the VM! 
+👉 <a href="https://community.vastdata.com/t/about-the-workshop-category/1969?utm_campaign=event26-builders-challenge" target="_blank" rel="noopener">Visit and join Cosmos</a> to ask questions and access the VM! ([view PDF guide for infra onboarding](docs/BUILDERS-CHALLENGE-INFRA-ONBOARDING.pdf))
 
 To load the VM, click on `Open Desktop`:
 
@@ -48,7 +48,8 @@ To load the VM, click on `Open Desktop`:
 
 ### Your team
 Form your team and sit together first, decide on who's launching a VM before
-selecting your assigned team number.
+selecting your assigned team number. Only two team members can access the VM, so others
+can pair, build in parallel, or swap in once a seat frees up.
 
 > Ensure you select the assigned team (e.g. `team-1`) so all team members access
 > the same video ingestion pipeline.
@@ -93,6 +94,8 @@ Here is a video overview of the steps from this section:
 
 
 Before you kick off the coding agent and start using skills, head to the next section. We'll circle back to Skills very soon.
+
+> 💡 Want a guided run instead of reading ahead? Once Cursor is up, run `/build-day-quickstart` and it'll walk you through the Video Search & Summary UI, Skills, Test Drive, and Build one step at a time.
 
 ### If something looks off
 Run the health check in the [Reference](#reference) section. If it fails, or you need more help, run `/ask-cosmos` and post the result on <a href="https://community.vastdata.com/t/about-the-workshop-category/1969" target="_blank" rel="noopener">Cosmos</a>, and we'll follow up.
@@ -281,6 +284,11 @@ cases, and worked example queries, see the
 2. **Build an app or agent**
 3. **Deploy and iterate**
 
+> 💡 Once you've deployed with `/deploy-app-no-registry`, check out your app in your own
+> browser at [workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com) — click **App**.
+
+<p align="center"><img src="docs/images/view-deployed-app.png" alt="The App button on the VAST workshop home page, for viewing your deployed app" width="90%"></p>
+
 If the existing captions cover what you need, you never have to think about prompts. If they
 don't, re-ingest the footage with a different prompt.
 
@@ -301,7 +309,7 @@ The skills used by Cursor can be used by agent frameworks too. They follow the s
 
 ## 6. Demos
 
-Submissions will start around 4:30pm. Instructions here: <a href="https://tokensand.com/vastnyc" target="_blank" rel="noopener">https://tokensand.com/vastnyc</a>.
+Submissions will start around 4:30pm. Instructions here: <a href="https://tokensand.com/vastnyc" target="_blank" rel="noopener">https://tokensand.com/vastnyc</a> (click `Submit your project`).
 
 We'll do a first round of judging with each team to walk through what you built and to hear how the day went.
 

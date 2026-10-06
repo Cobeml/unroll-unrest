@@ -2,7 +2,7 @@
 name: ask-cosmos
 description: >-
   Help a team get unstuck by preparing a note worth reading, with the relevant details
-  and team name, ready to paste into a Cosmos post or support ticket. Never posts anywhere. Runs the
+  and team name, ready to post to Cosmos. Posts only after the team confirms the draft. Runs the
   health check first so the answer includes whether the stack is healthy. Always produces a
   note, whether or not an actual error was found. If nothing's obviously broken, it still
   gives whoever comes to help the context to start from.
@@ -53,6 +53,19 @@ Rules for the fields:
   actually failed, say what they're stuck on instead of forcing an error into the field.
   This is the context someone reads before helping, not a bug report.
 - No stack traces, logs, file dumps or response bodies. Say which command failed instead.
+
+## Post it
+
+Only after the team says yes to the finished draft, post it through the relay. Never post
+without that confirmation.
+
+```
+curl -s "${ASK_COSMOS_URL:-http://localhost:8099}/ask" -H 'content-type: application/json' \
+  -d '{"username":"'"$USERNAME"'","team":"<team>","title":"<one line>","note":"<the note>"}'
+```
+
+`username` is `$USERNAME` and `team` is the team name used in the note. On success, show the
+returned `url`. If the call fails, say so and give the note back to paste manually.
 
 ## Keep it safe to share
 
