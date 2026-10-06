@@ -1,5 +1,5 @@
 ---
-name: retrieval-vastdb-write
+name: vast-database-vastdb-write
 description: >-
   Write to the team's VastDB with the vastdb Python SDK — create schemas/tables
   and insert rows on the existing database (bucket). Always connect to the data
@@ -7,7 +7,7 @@ description: >-
   custom tables alongside vss-collection (not for editing DataEngine pipelines).
 ---
 
-# Retrieval: VastDB write (vss2)
+# Vast Database: write (vss2)
 
 Create schemas/tables and insert rows with the `vastdb` Python SDK on the team's
 existing VastDB **bucket**. Always use the **data VIP** — never the Query Engine VIP
@@ -54,12 +54,12 @@ pip install vastdb pyarrow
 [insert.py](insert.py) creates `hackathon.demo_events` if needed and inserts rows:
 
 ```bash
-python .cursor/skills/retrieval/vastdb-write/insert.py --example
-python .cursor/skills/retrieval/vastdb-write/insert.py --schema hackathon --table demo_events --json rows.json
-echo '[{"id":3,"label":"ok","score":0.5,"note":"x"}]' | python .cursor/skills/retrieval/vastdb-write/insert.py
+python .cursor/skills/vast-database/vastdb-write/insert.py --example
+python .cursor/skills/vast-database/vastdb-write/insert.py --schema hackathon --table demo_events --json rows.json
+echo '[{"id":3,"label":"ok","score":0.5,"note":"x"}]' | python .cursor/skills/vast-database/vastdb-write/insert.py
 ```
 
-Verify with `retrieval/vastdb-read` (`list_catalog.py` / `query.py --schema hackathon --table demo_events`).
+Verify with `vast-database/vastdb-read` (`list_catalog.py` / `query.py --schema hackathon --table demo_events`).
 
 ## Create schema + table + insert (inline)
 

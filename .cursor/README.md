@@ -9,7 +9,8 @@ Agent skills for working with the VSS2 video search stack. Each skill lives in i
 ├── deployment/             # Deploy retrieval K8s apps + hackathon mini-apps
 ├── gpu/                    # Health + smoke-test model endpoints
 ├── ingest/                 # Upload new video or re-ingest indexed archive
-└── retrieval/              # Query and explore indexed video
+├── retrieval/              # Query and explore indexed video
+└── vast-database/          # Raw VastDB SDK read/write (not the JWT API)
 ```
 
 Runtime configuration is mounted outside the repo at absolute `/config/`:
@@ -46,10 +47,19 @@ Query the indexed archive through the backend API (`/api/v1`). Most routes need 
 | [suggest-prompts](skills/retrieval/suggest-prompts/SKILL.md) | AI-generated search prompt suggestions |
 | [videos](skills/retrieval/videos/SKILL.md) | Browse, play back, and summarize a video |
 | [agent-qa](skills/retrieval/agent-qa/SKILL.md) | Natural-language Q&A over the archive |
-| [vastdb-read](skills/retrieval/vastdb-read/SKILL.md) | Raw VastDB catalog + select (data VIP / optional QE) |
-| [vastdb-write](skills/retrieval/vastdb-write/SKILL.md) | Create schemas/tables + insert (data VIP only) |
 
 → [retrieval/README.md](skills/retrieval/README.md)
+
+## Vast Database
+
+Raw SDK access to the team’s VastDB bucket (bypasses the JWT API).
+
+| Skill | Summary |
+|-------|---------|
+| [vastdb-read](skills/vast-database/vastdb-read/SKILL.md) | Raw VastDB catalog + select (data VIP / optional QE) |
+| [vastdb-write](skills/vast-database/vastdb-write/SKILL.md) | Create schemas/tables + insert (data VIP only) |
+
+→ [vast-database/README.md](skills/vast-database/README.md)
 
 ## Deployment
 
@@ -84,6 +94,6 @@ Shared endpoint addresses are documented in [gpu/README.md](skills/gpu/README.md
 
 **Watch a result** → `login` → `videos`
 
-**VastDB custom tables** → `vastdb-write` (create/insert on data VIP) → `vastdb-read` (select)
+**VastDB custom tables** → `vast-database/vastdb-write` (create/insert on data VIP) → `vast-database/vastdb-read` (select)
 
 **Hackathon mini-app (no Docker)** → write small app → `deployment/deploy-app-no-registry` → [workshop.thecosmoslabs.com](https://workshop.thecosmoslabs.com) → **App**

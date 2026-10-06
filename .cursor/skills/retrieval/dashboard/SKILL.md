@@ -43,4 +43,4 @@ Compare `s3_inventory.segments_mp4` (clips written by the segmenter) with `pipel
 
 1. Ensure a JWT; pick `scope` (`mine` for the caller's uploads).
 2. For "is my video processed?", read `recent_videos[]` + `pipeline_alignment`, not just totals.
-3. This is read-only aggregation; to inspect a specific row, use `retrieval/videos` or `retrieval/vastdb-read`.
+3. This is read-only aggregation; to inspect a specific row, use `retrieval/videos` or `vast-database/vastdb-read`.
