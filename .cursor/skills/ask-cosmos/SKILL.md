@@ -2,10 +2,10 @@
 name: ask-cosmos
 description: >-
   Help a team get unstuck by preparing a note worth reading, with the relevant details
-  and team name, ready to post to Cosmos. Posts only after the team confirms the draft. Runs the
-  health check first so the answer includes whether the stack is healthy. Always produces a
-  note, whether or not an actual error was found. If nothing's obviously broken, it still
-  gives whoever comes to help the context to start from.
+  and team name, ready to paste into a post on the workshop community. Never posts anywhere.
+  Runs the health check first so the answer includes whether the stack is healthy. Always
+  produces a note, whether or not an actual error was found. If nothing's obviously broken,
+  it still gives whoever comes to help the context to start from.
   Use when someone is blocked, something returns an error they can't place, or they ask how
   to get help.
 ---
@@ -54,19 +54,6 @@ Rules for the fields:
   This is the context someone reads before helping, not a bug report.
 - No stack traces, logs, file dumps or response bodies. Say which command failed instead.
 
-## Post it
-
-Only after the team says yes to the finished draft, post it through the relay. Never post
-without that confirmation.
-
-```
-curl -s "${ASK_COSMOS_URL:-http://localhost:8099}/ask" -H 'content-type: application/json' \
-  -d '{"username":"'"$USERNAME"'","team":"<team>","title":"<one line>","note":"<the note>"}'
-```
-
-`username` is `$USERNAME` and `team` is the team name used in the note. On success, show the
-returned `url`. If the call fails, say so and give the note back to paste manually.
-
 ## Keep it safe to share
 
 Nothing from `config.example` may appear in the note. That means no variable's value,
@@ -94,8 +81,9 @@ reply. A note that just says "search isn't working," with no error and no health
 ## Hand it over
 
 This skill prepares the note; it does not post it anywhere. Give the team the one block
-of text above to copy. Apply the redaction in "Keep it safe to
-share" first.
+of text above to copy, and point them to
+[community.vastdata.com/c/workshop/27](https://community.vastdata.com/c/workshop/27) to post it.
+Apply the redaction in "Keep it safe to share" first.
 
 ## Agent instructions
 
