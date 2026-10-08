@@ -52,16 +52,18 @@ Stay in **your** team namespace only.
 ## Prerequisites
 
 ```bash
-export KUBECONFIG=/config/kubeconfig
-kubectl cluster-info
-
 mapfile -t TEAM_CONFIGS < <(find /config -maxdepth 1 -type f -name '*.config' | sort)
 (( ${#TEAM_CONFIGS[@]} == 1 )) || { echo "expected exactly one /config/*.config"; exit 1; }
 TEAM_CONFIG="${TEAM_CONFIGS[0]}"
-set -a && source "$TEAM_CONFIG" && set +a
+# Do not `source` on zsh (USERNAME is reserved). Parse keys:
+USERNAME=$(grep '^USERNAME=' "$TEAM_CONFIG" | cut -d= -f2-)
+INGRESS_URL=$(grep '^INGRESS_URL=' "$TEAM_CONFIG" | cut -d= -f2-)
+PASSWORD=$(grep '^PASSWORD=' "$TEAM_CONFIG" | cut -d= -f2-)
 
 # Namespace = this team only (e.g. team-17). Confirm with the user if unclear.
 NS="$USERNAME"
+export KUBECONFIG=/config/${NS}-k8s.yaml   # e.g. /config/team-1-k8s.yaml
+kubectl cluster-info
 
 # Ingress host (cluster). Users open the workshop App button, not this URL.
 TEAM_N="${USERNAME#team-}"

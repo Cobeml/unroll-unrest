@@ -3,12 +3,12 @@ name: deploy-retrieval
 description: >-
   Deploy the VSS retrieval stack (backend, frontend, batch-sync) to Kubernetes
   with QUICK_DEPLOY.sh <namespace> <cluster>, including building/pushing images.
-  Use /config/kubeconfig. Use to stand up or redeploy the retrieval side after build-yamls.
+  Use /config/team-<num>-k8s.yaml. Use to stand up or redeploy the retrieval side after build-yamls.
 ---
 
 # Deployment: deploy retrieval (vss2)
 
-Applies everything in `deployments/vss-k8s-application/` to the cluster. Prereq: `deploy-build-yamls` (secret + image tags), and `/config/kubeconfig`.
+Applies everything in `deployments/vss-k8s-application/` to the cluster. Prereq: `deploy-build-yamls` (secret + image tags), and `/config/team-<num>-k8s.yaml`.
 
 ## 1. Build & push images (if changed)
 
@@ -17,7 +17,10 @@ Build/push `vss-video-backend`, `vss-video-frontend`, `vss-video-batch-sync` fro
 ## 2. Run QUICK_DEPLOY
 
 ```bash
-export KUBECONFIG=/config/kubeconfig
+mapfile -t TEAM_CONFIGS < <(find /config -maxdepth 1 -type f -name '*.config' | sort)
+(( ${#TEAM_CONFIGS[@]} == 1 )) || { echo "expected exactly one /config/*.config"; exit 1; }
+NS=$(grep '^USERNAME=' "${TEAM_CONFIGS[0]}" | cut -d= -f2-)   # e.g. team-1
+export KUBECONFIG=/config/${NS}-k8s.yaml                     # e.g. /config/team-1-k8s.yaml
 kubectl cluster-info
 cd deployments/vss-k8s-application
 ./QUICK_DEPLOY.sh <namespace> <cluster_name>     # e.g. ./QUICK_DEPLOY.sh vastvideo v1234
@@ -59,7 +62,7 @@ kubectl rollout status deploy/video-backend -n <namespace>
 
 ## Agent instructions
 
-1. Set `KUBECONFIG=/config/kubeconfig`; if missing, ask the user to place it there. Confirm `kubectl cluster-info`.
+1. Resolve team from `/config/*.config` (`USERNAME`, e.g. `team-1`) and set `KUBECONFIG=/config/${USERNAME}-k8s.yaml`; if missing, ask the user to place it there. Confirm `kubectl cluster-info`.
 2. Confirm images are pushed and `/config/backend-secret.yaml` exists (ask user to add it if not).
 3. Ensure deploy dir has `backend-secret.yaml` copied from `/config/backend-secret.yaml`.
 4. Run `QUICK_DEPLOY.sh <ns> <cluster>`; capture the ingress IP and verify with `deploy-health`.

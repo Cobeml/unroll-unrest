@@ -16,7 +16,7 @@ Agent skills for working with the VSS2 video search stack. Each skill lives in i
 Runtime configuration is mounted outside the repo at absolute `/config/`:
 
 - `/config/<team>.config` — team credentials and GPU bearer
-- `/config/kubeconfig` — Kubernetes access
+- `/config/team-<num>-k8s.yaml` — Kubernetes access (e.g. `/config/team-1-k8s.yaml`)
 - `/config/backend-secret.yaml` — retrieval backend secret (and `/config/vss-cli-secret.yaml` when aligning ingest keys)
 
 Skills must not search the repo's `team-configs/`.

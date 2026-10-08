@@ -13,7 +13,10 @@ Confirms pods are running and the backend is wired correctly. Read-only.
 ## Pods / rollout
 
 ```bash
-export KUBECONFIG=/config/kubeconfig
+mapfile -t TEAM_CONFIGS < <(find /config -maxdepth 1 -type f -name '*.config' | sort)
+(( ${#TEAM_CONFIGS[@]} == 1 )) || { echo "expected exactly one /config/*.config"; exit 1; }
+NS=$(grep '^USERNAME=' "${TEAM_CONFIGS[0]}" | cut -d= -f2-)   # e.g. team-1
+export KUBECONFIG=/config/${NS}-k8s.yaml                     # e.g. /config/team-1-k8s.yaml
 kubectl get pods -n <namespace>
 kubectl get all -n <namespace>
 kubectl describe pod -n <namespace> -l app=video-backend      # events on CrashLoop/ImagePull
@@ -54,6 +57,6 @@ Check S3 endpoint, `vdb_collection: vss-collection`, embedding host + `256` dims
 
 ## Agent instructions
 
-1. Set `KUBECONFIG=/config/kubeconfig`; if missing, ask the user to put it there. Run `kubectl get pods` first; `describe`/`logs` any non-Running pod.
+1. Resolve team from `/config/*.config` (`USERNAME`, e.g. `team-1`) and set `KUBECONFIG=/config/${USERNAME}-k8s.yaml`; if missing, ask the user to put it there. Run `kubectl get pods` first; `describe`/`logs` any non-Running pod.
 2. Hit `/health`; then `GET /api/v1/config` to confirm wiring.
 3. Cross-check `/api/v1/config` against `/config/vss-cli-secret.yaml` and `/config/backend-secret.yaml` when present; for deeper debugging read pod logs.

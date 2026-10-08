@@ -44,8 +44,8 @@ Never search the repo's `team-configs/` or echo credentials.
 ### Query Engine VIP from K8s (optional)
 
 ```bash
-export KUBECONFIG=/config/kubeconfig
 NS=$(grep '^USERNAME=' "${TEAM_CONFIGS[0]}" | cut -d= -f2-)   # team namespace, e.g. team-11
+export KUBECONFIG=/config/${NS}-k8s.yaml                     # e.g. /config/team-11-k8s.yaml
 
 # 1) Prefer file if present:
 #    /config/backend-secret.yaml → stringData.config.yaml → vdb_endpoint
