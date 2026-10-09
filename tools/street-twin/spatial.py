@@ -328,6 +328,8 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
         if verification.get('method')=='authenticated_transfer_sha256':
             if not re.fullmatch('[a-f0-9]{64}',verification.get('source_sha256','')):raise SpatialError('Invalid source checksum.')
             scene['source_verification']={k:verification[k] for k in ['method','archive_filename','source_sha256','source_bytes','remote_run_id','offset_sec']}
+            for k in ['indexed_end_sec','uncaptioned_tail_sec']:
+                if k in verification:scene['source_verification'][k]=number(verification[k])
         else:
             scene['source_verification']={'method':'visual_frame_match','archive_filename':str(verification.get('archive_filename',''))[:160],
                 'frame_time_sec':number(verification.get('frame_time_sec',0))}

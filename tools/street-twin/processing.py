@@ -251,12 +251,17 @@ class Jobs:
         intervals = [{'segment_id':c['id'],'scene_start_sec':c['start_sec'],
             'scene_end_sec':min(duration,c['end_sec']),'clip_start_sec':0}
             for c in sorted(clips,key=lambda c:c['start_sec']) if c['start_sec'] < duration]
-        if not intervals or duration > max(c['end_sec'] for c in clips) + .2:
+        indexed_end=max((c['end_sec'] for c in clips),default=0)
+        # VSS indexes whole 5-second segments; a decoded last frame can extend
+        # beyond them. Permit one 5fps frame plus timestamp rounding, while
+        # retaining the uncaptioned tail and never extending clip citations.
+        if not intervals or duration > indexed_end + .25:
             raise SpatialError('Map duration does not match the indexed parent.')
         return {'original_video':job['original_video'],'bindings':intervals,
             'verification':{'method':'authenticated_transfer_sha256','archive_filename':job['source_filename'],
                 'source_sha256':job['source_sha256'],'source_bytes':job['source_bytes'],
-                'remote_run_id':job['remote_run_id'],'offset_sec':0}}
+                'remote_run_id':job['remote_run_id'],'offset_sec':0,
+                'indexed_end_sec':indexed_end,'uncaptioned_tail_sec':max(0,duration-indexed_end)}}
 
     def tick(self):
         jobs = [j for j in self.list() if j['status'] in ACTIVE]

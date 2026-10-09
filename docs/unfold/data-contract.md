@@ -8,7 +8,7 @@ The only public processing input is:
 {"segment_id":"ef7c083c57cb1601f04f"}
 ```
 
-`POST /api/runs` resolves that canonical 20-character ID through the existing VSS archive. The client cannot supply a URL, filesystem path, bucket, model prompt, token or arbitrary video. Street/traffic sources are admitted. The **full parent** is transferred as indexed; its start is scene time zero. Segment timestamps remain parent-relative. The selected moment is a highlight, not an edited clip.
+`POST /api/runs` resolves that canonical 20-character ID through the existing VSS archive. The client cannot supply a URL, filesystem path, bucket, model prompt, token or arbitrary video. Street/traffic sources are admitted. The **full parent** is transferred as indexed; its start is scene time zero. Segment timestamps remain parent-relative. A terminal source-frame tail up to 250 ms beyond the captioned intervals is retained and explicitly recorded as uncaptioned; citations never extend into that gap. The selected moment is a highlight, not an edited clip.
 
 ## Processing and identity
 

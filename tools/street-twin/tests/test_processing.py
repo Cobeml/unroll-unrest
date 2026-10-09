@@ -72,6 +72,7 @@ class ProcessingTests(unittest.TestCase):
         manifest=self.jobs.bindings(job,4.8)
         self.assertEqual(manifest['bindings'][0]['scene_end_sec'],4.8)
         self.assertEqual(manifest['verification']['method'],'authenticated_transfer_sha256')
+        self.assertAlmostEqual(self.jobs.bindings(job,5.21)['verification']['uncaptioned_tail_sec'],.21)
         with self.assertRaisesRegex(SpatialError,'duration'):self.jobs.bindings(job,6)
     def test_outage_preserves_job_and_resumes_same_remote_id(self):
         job=self.jobs.start(self.sid);job['remote_run_id']='existing';self.jobs.save(job)
