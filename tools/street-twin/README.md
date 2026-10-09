@@ -1,57 +1,78 @@
 # StreetTwin
 
-Street video with object detections, a reserved 3D viewport, and policy recommendations backed by cited archive observations.
+Street bottlenecks, object detections, and paired policy/infrastructure recommendations grounded in indexed video evidence. Off-white, serif, video-first web interface; reconstruction remains deferred.
 
 ## Run and deploy
 
-The deliverable runs on the team Kubernetes cluster at `/app`. Credentials and kubeconfig remain mounted under `/config`.
+The deliverable runs on the team Kubernetes cluster at `/app`. Credentials and kubeconfig remain under `/config`.
 
 ```bash
 cd ~/vast-builders-challenge
 bash tools/street-twin/deploy.sh
 ```
 
-Open [the workshop](https://workshop.thecosmoslabs.com) → **App** after rollout. Deployment uses a public Python image, code ConfigMap, runtime credential Secret, and the existing team's Ingress. It discovers the existing `/api` backend Service for in-cluster calls. Updates rerun the command and restart StreetTwin; another app's `/app` route is never overwritten. No Docker build, registry, video upload, GPU installation, or DataEngine changes are involved.
+Open [the workshop](https://workshop.thecosmoslabs.com) → **App** after rollout. The deployment uses a public Python image, code ConfigMap, runtime Secret, and the existing team's Ingress. It discovers the existing `/api` Service for backend calls. Updates restart StreetTwin; another app's `/app` route is never overwritten. No Docker build, registry or DataEngine changes are required.
 
-For development verification, use a Python virtual environment with `requirements.txt`, runtime `VSS_URL`, `VSS_USERNAME`, and `VSS_PASSWORD`, and `gunicorn --chdir tools/street-twin --workers 1 --threads 8 --timeout 180 main:app`. Use one worker because caches and archive registration are in memory. Development preview is not the deliverable.
+For development verification, install `requirements.txt` in a Python virtual environment, supply runtime `VSS_URL`, `VSS_USERNAME`, and `VSS_PASSWORD` without writing them into the repository, and run:
 
 ```bash
+gunicorn --chdir tools/street-twin --workers 1 --threads 8 --timeout 180 main:app
 python -m unittest discover -s tools/street-twin/tests -v
 ```
 
+One worker is required because analysis jobs and archive registration are in memory. Development preview is for testing; the deployed App is the deliverable. Never commit `.env` files or credentials.
+
 ## Three-minute demo
 
-1. The initial **Street Explorer** opens NYC cycling footage with an archive-frame preview and YOLO boxes. Press the video control to play. Select **bicycle**, **truck**, or **person** to highlight that class; use the arrows to browse clips. Location/camera selections update the view. Dates and semantic search are inside **Filters**; detailed captions and sources are inside **Clip details**.
-2. Open **Review cyclist passage**. It navigates to its own shareable `/app/policy/<id>` page. The initial explored sample has six supporting clips out of 30 camera clips (20%), representing 30 seconds of cited footage. Show numbered citations, play another cited clip, inspect its source and caption, and reload the URL. Statistics are regenerated from the same filters; they can change when the underlying archive changes.
-3. Return with **Street view** and use the three compact example buttons. Each resolves a verified filename in the live archive, rather than depending on search ranking.
+1. **Find the bottleneck.** Click **Blocked passage**. The red sedan occupies part of the riding path; the rider steers around it. Footage loads immediately while background analysis diagnoses the obstruction. Use **car** to highlight YOLO boxes and **Play evidence** to watch the maneuver.
+2. **Open the policy recommendation.** Choose **Keep the riding path clear**. Show one local episode, two cited clips, and 10 seconds of referenced footage. Citations distinguish the obstruction from the avoidance maneuver. Open **Implementation & evidence limits** for the responsible function, curb-rule checks, and follow-up. Reload the report URL to demonstrate shareable evidence.
+3. **Open the infrastructure recommendation.** Return to Street view and open **Evaluate a protected passage**. The action proposes a continuous passage and loading space outside it, conditional on measuring width and checking access and junctions. Both recommendations cite the same diagnosed bottleneck. Use **Truck & barrier** as a second case: the pipeline generates different loading/temporary-works actions.
 
-| Example / query | Policy review | Filename / parent-relative seconds |
+The presets resolve filenames in the live indexed archive, independent of search ranking. They include all six neighboring segments from their parent for temporal context. The primary maneuver is selected automatically.
+
+| Search query / demo | Evidence | Supported action |
 | --- | --- | --- |
-| Passage: Delivery trucks partially blocking the street while cycling | Cyclist passage / curb use | `20261008_072535_GOPR0130_chunk_0004_segment_005_of_006.mp4`, 20–25 s |
-| Crossing: Pedestrians crossing the road near bicycles and moving vehicles | Crossing clearance | `20261008_074241_GX010001_chunk_0014_segment_002_of_006.mp4`, 5–10 s |
-| Queue: Cars stopped or moving slowly beside a protected bike lane | Intersection approach | `20261008_074151_GX010001_chunk_0012_segment_006_of_006.mp4`, 25–30 s |
+| Parked red sedan obstructs the riding path; rider maneuvers around it | `20261008_074847_GX050001_chunk_0005_segment_004_of_006.mp4`, 15–20 s; preceding segment at 10–15 s | Coordinate curb use to keep passage clear |
+| Evaluate a protected passage where a parked car causes an avoidance maneuver | Same red-sedan sequence; infrastructure card under **Blocked passage** | Survey a continuous protected passage and designated loading space |
+| Delivery truck and barrier narrow passage; cyclists navigate past the truck | `20261008_072535_GOPR0130_chunk_0004_segment_004_of_006.mp4`, 15–20 s; neighboring obstruction context | Coordinate loading/temporary works; evaluate a continuous bypass |
 
-Use Filters to search these descriptions for related clips. Policy links preserve the active filter, search, or demo context. A demo contains one anchored clip, so its policy statistics deliberately describe that one-clip example. Select Nashville / I-24 to show ordinary traffic with no supported congestion policy. Select Neighborhood to inspect Pack D. Switching location clears incompatible cameras.
+Primary segment ID: `7d023dd390c2a7baac0f`. Truck maneuver ID: `3abeb5fe5ebffa78b989`. Camera: `nyc_bike_gopro-1`; location: `new_york`. Seconds are parent-relative, not recording clock times.
 
-## Policy statistics and evidence
+Select Nashville / I-24 to show a negative case: normal traffic produces no bottleneck recommendation. Neighborhood / Pack D parking alone also does not qualify. Crossing and queue archive presets remain available through `/api/demo/crossing` and `/api/demo/queue`; feature presence or red-light queues alone do not establish actionable bottlenecks.
 
-Cosmos video-reasoning captions establish observations. Conservative templates produce structured recommendations for cyclist passage, curb use, crossings, and slow traffic; validation requires matching segment IDs, sources, camera, location, timestamps, and supporting caption sentences. YOLO supplies video boxes and object context. Object co-occurrence alone does not establish danger or proximity. Optional parent-video Q&A supplies descriptive analysis without overriding the structured reports.
+## How recommendations are generated
 
-`GET /api/analytics` selects up to 96 segments across cameras and archive positions. `GET /api/search?query=…` uses up to 30 search results. Both accept `location`, `camera_id`, `start`, and `end`; dates describe indexing, not recording time.
+The pipeline retrieves candidate clips, expands neighboring evidence, synthesizes a diagnosis from indexed video-reasoning captions, validates every quotation, computes statistics, and chooses interventions from a mechanism-specific catalogue. Ordinary street observations remain descriptive; keyword matches no longer produce recommendation cards.
 
-`GET /api/policy/<id>` regenerates the report from the same filter/search/demo context. It contains the recommendation, cited clips, analysis, and statistics. The denominator is the selected sample from the recommendation's camera and location. Supporting clip share is not an event rate, causal estimate, or citywide prevalence. Adjacent clips may show the same event. Referenced seconds merge overlapping intervals within each parent video. Detection bars count clips containing each class; peak per-frame counts are never unique road-user totals.
+V1 admits **obstructed passage with an observed avoidance maneuver**, with parked-vehicle and temporary-barrier subtypes. Each diagnosis requires both an obstruction and a movement-effect quote in nearby segments of the same parent. Unknown segment numbers, altered quotations, unrelated intervals, negated claims and speculative movement are rejected. JSON and a single JSON code fence are supported; one complete leading Cosmos `<think>…</think>` block is discarded. Decimal segment-number strings are losslessly normalized. A rejected response is retried once; another rejection fails closed and leaves footage available. Logs contain failure categories without runtime URLs or credentials. Model-written enforcement suggestions or metrics cannot override the catalogue or computed values.
 
-Policy pages return 404 when the current view has no supporting report. Stable recommendation IDs identify type + camera + location; URL query parameters preserve the observation scope. Segment IDs hash the canonical VSS source, which remains included in every citation. No statistics establish legal violations, engine idling, calibrated distances/speeds, or congestion duration.
+For an archive view, the pipeline combines sampled clips with three targeted retrieval queries (eight hits each), plus the user's search if present. It analyzes at most three parents and six neighboring segments per parent. The deployed VSS rejects `llm_top_n=0`; the client remembers this and uses its required minimum of one. That search narrative is discarded. A separate quotation-constrained synthesis establishes the diagnosis.
 
-Other routes: `/api/metadata`, `/api/stats`, `/api/recommendations`, `/api/evidence/<id>`, `/api/detections/<id>`, `/api/stream/<id>`, `/api/demo/{passage,crossing,queue}`, `/api/spatial`, `/health`, and `POST /api/reason/<id>`. Server-side JWT refresh and Range streaming are unchanged. Caches are short-lived and in memory; credentials/JWTs are not sent to the browser. Derived VastDB storage is unnecessary.
+Actions are paired **policy** and **infrastructure** proposals, with a shared bottleneck ID, responsible function, purpose, prerequisites and follow-up. They do not claim illegal parking, measured delay, capacity loss, calibrated width/speed, or quantified benefits. Infrastructure proposals require a site survey. Adjacent claims within a local episode are merged; the moving camera's entire archive is never treated as one street location.
+
+Metrics are calculated in code: distinct cited segments, union of referenced parent-relative intervals, and YOLO class presence/peak per-frame counts at confidence ≥0.5. Referenced seconds are footage duration, not delay. Box counts are not unique road users. Missing sidecars are explicit and do not prevent a caption-supported finding. Optional parent-video Q&A is descriptive and cannot override the structured reports.
+
+## API and background loading
+
+- `GET /api/analytics` and `/api/search?query=…`: load archive clips and descriptive aggregates immediately. Filters: `location`, `camera_id`, `start`, `end`; dates mean indexing dates.
+- `POST /api/analysis`: JSON containing those filters, optional `query`, or `demo`. Returns 202 with `id`, `status`, `phase` and scope while pending, or 200 with completed results.
+- `GET /api/analysis/<id>`: poll status. Completion includes validated `bottlenecks`, `recommendations`, clips, warnings, analyzed-parent counts and generation/version fields. Large detection sidecars stay server-side.
+- `GET /api/recommendations?<scope>`: starts/reuses the same scoped analysis; returns pending status or completed findings.
+- `GET /api/policy/<id>?<scope>`: returns the cited report after analysis. On a cold reload it returns 202, allowing the frontend to wait for regeneration. Missing supported recommendations return 404 after completion.
+
+Recommendation JSON retains `id`, `type`, `severity`, `metrics`, and `segment_refs[]`. It adds `bottleneck_id`, role-tagged quoted claims, `category`, purpose/owner/prerequisites/follow-up, uncertainties, and generation/version fields. Policy and infrastructure IDs derive from the local bottleneck identity; URL parameters preserve the analysis scope.
+
+Jobs deduplicate by scope and pipeline version, use two background workers, allow at most eight active jobs and 32 retained jobs, and expire completed results after 30 minutes. Failed jobs can be retried. Analysis checks a five-minute budget between upstream calls; an in-flight request can run until its upstream timeout. Polling stops when the user changes views. Failed analysis preserves playable footage and offers a separate retry. Pod restarts discard caches and jobs; report links regenerate from their scope.
+
+Other routes: `/api/metadata`, `/api/stats`, `/api/evidence/<id>`, `/api/detections/<id>`, `/api/stream/<id>`, `/api/demo/{bottleneck,passage,crossing,queue}`, `/api/spatial`, `/health`, and `POST /api/reason/<id>`. Server-side JWT refresh and Range streaming keep credentials out of the browser. No derived VastDB storage is needed.
 
 ## Loading and diagnostics
 
-HTML declares its public base path on the server; assets do not depend on an inline script. The deployment sets `STREETTWIN_PUBLIC_PATH=/app/`; local development defaults to `/`. A reverse proxy can supply a full `X-Forwarded-Prefix` mount. Policy deep links use the same base. HTML is not cached, and CSS/JavaScript URLs carry a content version to prevent mixed frontend releases. Failed archive requests show a short message and Retry.
+HTML declares the public base path server-side. Deployment sets `STREETTWIN_PUBLIC_PATH=/app/`; local verification defaults to `/`. A proxy can supply a validated `X-Forwarded-Prefix`. HTML is not cached; CSS/JavaScript URLs carry a content version. Local serif fallbacks avoid external font requests.
 
-The interface uses an off-white background, local serif font fallbacks, and an SVG twin-street mark. No external font requests block rendering. Video loads on explicit play; SVG detection overlays and the empty spatial grid keep first render independent of canvas initialization. `street-preview.jpg` is the first frame extracted from the existing passage anchor (segment ID `6c04f82de23dc760739a`, parent-relative 20 seconds). It appears only for that segment, with detections from its first timestamp; other clips never inherit this preview. This is a derived image, not a new video upload.
+Video plays on explicit user action. SVG overlays use real YOLO frame boxes. The JPEG previews are first frames extracted from existing indexed segments, displayed only for their exact segment IDs: `bottleneck-preview.jpg` → `7d023dd390c2a7baac0f`; `street-preview.jpg` → `6c04f82de23dc760739a`. They are derived images, not new video uploads.
 
-The team kubeconfig allows StreetTwin pod logs, rollout status, and pod events. It does not provide the user's browser Console/Network history, authenticated workshop session, or the workshop gateway's private logs. If the workshop view differs from the checked Ingress, capture the browser URL path and the first Console error or failed Network request (path, HTTP status, and content type); exclude credentials and tokens.
+Pod logs, rollout status and pod events are accessible. The user's browser Console/Network history, authenticated workshop session and private gateway logs are not. For a browser-only failure, capture the URL path and first failed request's path/status/content type or Console error, excluding tokens and credentials.
 
 ## Spatial status
 
@@ -84,8 +105,8 @@ Once the codebase and GPU access are available, adapt in this order:
 
 The user will run LingBot on a separate machine and supply its visualizer codebase and tunnel. Shared GPU deployment is no longer the planned integration path. Once supplied, inspect the visualizer's export/API contract and adapt the interface around existing segment IDs before providing a spatial analysis tool to the recommender. No tunnel client, reconstruction, or spatial agent tool is connected yet.
 
-## Corpus notes
+## Corpus and re-ingest notes
 
-Explored Pack A (`i24_cam-1`, 180 clips), Pack D (`neighborhood_cam-1`, 307), NYC cycling (`nyc_bike_gopro-1`, 465), and NYC street footage. The explored archive contains 612 parent videos and 3,537 indexed segments; 14 additional S3 segments were pending indexing at initial exploration and are excluded from indexed totals.
+Existing indexed sources only: Pack A (`i24_cam-1`), Pack D (`neighborhood_cam-1`), NYC cycling (`nyc_bike_gopro-1`), and other street packs. Both inspected demo sequences are NYC cycling footage. Archive counts are available live through `/api/stats` and can change as existing indexing completes.
 
-**No new videos uploaded. No re-ingest prompts used.** Current cycling captions provide usable planner observations; unsupported concepts remain unavailable.
+**No new videos uploaded. No re-ingest prompts used.** Current indexed captions support these diagnoses. The diagnosis prompt is in `bottlenecks.py`; it runs read-only synthesis, not re-ingestion. LingBot and spatial tool access remain deferred.
