@@ -113,7 +113,8 @@ class PolicyRouteTests(unittest.TestCase):
                 if tag=='link' and attrs.get('rel')=='stylesheet':self.css=attrs['href']
                 if tag=='script':self.script=attrs.get('src')
         with patch.dict(app.config,{'PUBLIC_PATH':'/app/'}),app.test_client() as client:
-            for route in ['/archive', '/policy/'+'a'*16]:
+            self.assertEqual(client.get('/archive').status_code,302)
+            for route in ['/policy/'+'a'*16]:
                 with client.get(route) as response:
                     page=Links();page.feed(response.text)
                     self.assertEqual(page.base,'/app/')

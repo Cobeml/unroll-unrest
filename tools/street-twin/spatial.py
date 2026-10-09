@@ -324,8 +324,13 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
         assets['viewer']={'sha256':hashlib.sha256(body).hexdigest(),'size':len(body),'mime':'application/json',
             'url':f'api/spatial/scenes/{sid}/assets/viewer'}
     if manifest.get('verification'):
-        scene['source_verification']={'method':'visual_frame_match','archive_filename':str(manifest.get('verification',{}).get('archive_filename',''))[:160],
-            'frame_time_sec':number(manifest.get('verification',{}).get('frame_time_sec',0))}
+        verification=manifest['verification']
+        if verification.get('method')=='authenticated_transfer_sha256':
+            if not re.fullmatch('[a-f0-9]{64}',verification.get('source_sha256','')):raise SpatialError('Invalid source checksum.')
+            scene['source_verification']={k:verification[k] for k in ['method','archive_filename','source_sha256','source_bytes','remote_run_id','offset_sec']}
+        else:
+            scene['source_verification']={'method':'visual_frame_match','archive_filename':str(verification.get('archive_filename',''))[:160],
+                'frame_time_sec':number(verification.get('frame_time_sec',0))}
     scene['hash']=hashlib.sha256(json.dumps(scene,sort_keys=True,allow_nan=False).encode()).hexdigest()
     store.publish(scene,bodies)
     return scene

@@ -68,21 +68,38 @@ def viewer_export(raw,scene):
 
 
 def demo_document(store,vss):
+    return scene_document(store,vss,SCENE_ID,expected_filename=PARENT_FILENAME)
+
+
+def scene_document(store,vss,scene_id,expected_filename=None):
     from spatial import SpatialError
     from vss import normalize
-    scene=store.scene(SCENE_ID)
+    scene=store.scene(scene_id)
     if not scene.get('bindings') or 'viewer' not in scene['assets']:raise SpatialError('The demo needs its saved export and verified archive bindings.',503)
     vss.archive()
     clips=[]
     for binding in scene['bindings']:
         row=vss.get_segment(binding['segment_id'])
-        if row.get('original_video','').rsplit('/',1)[-1]!=PARENT_FILENAME:raise SpatialError('Demo source does not match the indexed ride.',503)
+        if expected_filename and row.get('original_video','').rsplit('/',1)[-1]!=expected_filename:raise SpatialError('Demo source does not match the indexed ride.',503)
         clips.append(normalize(row,binding['segment_id']))
-    body,_,_=store.asset(SCENE_ID,'viewer');doc=json.loads(body)
-    doc.update(scene_id=SCENE_ID,scene_hash=scene['hash'],source_filename=PARENT_FILENAME,clips=clips,
-        video='api/ride/video',quality=scene['quality'],source_verification=scene.get('source_verification'),
+    parents={c['original_video'] for c in clips}
+    if len(parents)!=1:raise SpatialError('A ride must link to one indexed parent.',503)
+    body,_,_=store.asset(scene_id,'viewer');doc=json.loads(body)
+    doc.update(scene_id=scene_id,scene_hash=scene['hash'],source_filename=clips[0]['original_video'].rsplit('/',1)[-1],clips=clips,
+        video='api/ride/video' if expected_filename else 'api/rides/'+scene_id+'/video',quality=scene['quality'],source_verification=scene.get('source_verification'),
         findings=crossing_findings(doc,clips))
     return doc
+
+
+def synthesize_scene(doc,vss):
+    context={'findings':doc['findings'],'crossing_reviews':[{'object_id':o['id'],'side':e['side'],'review':e.get('review')} for o in doc['objects'] for e in o.get('ends',[]) if e.get('review')],
+        'motion_counts':{label:sum(o.get('motion')==label for o in doc['objects']) for label in ['standing','moving','unknown']}}
+    question='Explain any supported sightline or passage bottleneck and the associated maintenance proposal. Separate indexed caption observations from this imported spatial/review JSON: '+json.dumps(context)+'. Retain rejected claims as disagreements. Standing vehicles may be parked or queued; do not infer delays from aggregate footprints. Cite segment numbers and timestamps.'
+    prompt='Write four concise sections: Observed video, Imported spatial evidence, Maintenance proposal, Limits. Label geometry, visibility percentages, speed and stopping distance as imported estimates. Attribute vision-review claims to the imported review, not your own direct observation. Rejected claims cannot justify actions. Never infer a collision, legal violation, traffic delay or measured safety benefit. If no supported bottleneck is found, say so.'
+    result=vss.request('videos/synthesize',data={'original_video':doc['clips'][0]['original_video'],'question':question,'system_prompt':prompt,'max_segments':min(40,len(doc['clips']))})
+    return {'answer':result.get('answer') or result.get('llm_synthesis',{}).get('response') or 'No video synthesis returned.',
+        'scene_hash':doc['scene_hash'],'segment_ids':[c['id'] for c in doc['clips']],
+        'scope':'indexed_parent_and_imported_spatial_context'}
 
 
 def crossing_findings(doc,clips):

@@ -11,13 +11,15 @@ from spatial import SPATIAL_INTERFACE, SceneStore, SpatialError
 from policy import policy_report
 from service import filters_from, sample, BadFilter, analytics, matches, demo
 from analysis import AnalysisManager, context_from
-from ride_demo import demo_document, SCENE_ID
+from ride_demo import demo_document, scene_document, synthesize_scene, SCENE_ID
+from processing import Jobs, discover
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
 app.config['PUBLIC_PATH'] = os.environ.get('STREETTWIN_PUBLIC_PATH', '/')
 vss = VSS()
 scenes = SceneStore()
+jobs = Jobs(scenes,vss)
 analyses = AnalysisManager(vss, spatial=scenes)
 app.config['MAX_CONTENT_LENGTH'] = 8192
 
@@ -181,6 +183,52 @@ def stream_source(source):
 def ride_data():
     return jsonify(demo_document(scenes,vss))
 
+@app.get('/api/rides/<scene_id>')
+def get_ride(scene_id):
+    return jsonify(scene_document(scenes,vss,scene_id))
+
+@app.get('/api/rides/<scene_id>/video')
+def scene_video(scene_id):
+    doc=scene_document(scenes,vss,scene_id)
+    return stream_source(doc['clips'][0]['original_video'])
+
+@app.post('/api/rides/<scene_id>/analysis')
+def scene_analysis(scene_id):
+    doc=scene_document(scenes,vss,scene_id)
+    try:
+        result=json.loads(scenes.get('analyses/'+scene_id+'.json'))
+        if result.get('scene_hash')==doc['scene_hash']:return jsonify(result)
+    except SpatialError as e:
+        if e.status!=404:raise
+    return jsonify(vss.cache.get(('scene-analysis',doc['scene_hash']),lambda:synthesize_scene(doc,vss),ttl=1800))
+
+@app.get('/api/discover')
+def risk_clips():
+    filters=filters_from(request.args,vss.metadata())
+    try:page=int(request.args.get('page',0))
+    except ValueError:raise SpatialError('Invalid result page.') from None
+    if not 0<=page<=100:raise SpatialError('Invalid result page.')
+    candidates=discover(vss,request.args.get('kind','close-call'),filters)
+    return jsonify(candidates=candidates[page*4:(page+1)*4],page=page,page_size=4,total=len(candidates),
+        label='Danger candidates; a search match does not verify a crash or close call.')
+
+@app.get('/api/runs')
+def run_list():
+    return jsonify(runs=[jobs.public(j) for j in jobs.list()][:100])
+
+@app.post('/api/runs')
+def run_start():
+    body=request.get_json(silent=True) or {}
+    if not isinstance(body,dict):raise SpatialError('Choose an indexed segment.')
+    job=jobs.start(body.get('segment_id'))
+    return jsonify(jobs.public(job)),200 if job['status']=='complete' else 202
+
+@app.get('/api/runs/<job_id>')
+def run_status(job_id):return jsonify(jobs.public(jobs.get(job_id)))
+
+@app.post('/api/runs/<job_id>/retry')
+def run_retry(job_id):return jsonify(jobs.public(jobs.retry(job_id))),202
+
 @app.get('/api/ride/video')
 def ride_video():
     from ride_demo import PARENT_FILENAME
@@ -230,13 +278,29 @@ def stats():
 
 @app.get('/')
 def index():
-    return app_shell('index.html' if request.args.get('demo') or request.args.get('view') else 'ride.html')
+    return app_shell('ride.html')
 
 @app.get('/ride')
 def ride_page():return app_shell('ride.html')
 
 @app.get('/archive')
-def archive_page():return app_shell()
+def archive_page():
+    from flask import redirect
+    return redirect(app.config['PUBLIC_PATH'].rstrip('/')+'/discover',code=302)
+
+@app.get('/discover')
+@app.get('/runs/<job_id>')
+def discovery_page(job_id=None):
+    if job_id and not re.fullmatch('[a-f0-9]{24}',job_id):raise SpatialError('Run unavailable.',404)
+    return app_shell('discover.html')
+
+@app.get('/rides/<scene_id>')
+@app.get('/rides/<scene_id>/recommendations/<finding_id>')
+def saved_ride_page(scene_id,finding_id=None):
+    from spatial import ident
+    ident(scene_id)
+    if finding_id and not re.fullmatch(r'crossing-[0-9]{1,8}-(?:left|right)',finding_id):raise SpatialError('Finding unavailable.',404)
+    return app_shell('ride.html')
 
 @app.get('/finding/<finding_id>')
 def finding_page(finding_id):
@@ -253,7 +317,7 @@ def policy_page(review_id):
 def asset(name):
     if name in {'vendor/three.module.min.js','vendor/OrbitControls.js'}:
         return send_from_directory(ROOT, name)
-    if name not in {'app.js', 'cockpit.js', 'style.css', 'ride.js','ride.css','ride-preview.jpg','street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg'}:
+    if name not in {'app.js', 'cockpit.js', 'style.css', 'ride.js','ride.css','discover.js','ride-preview.jpg','street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg'}:
         return jsonify(error='Asset unavailable'), 404
     return send_from_directory(ROOT, name)
 
