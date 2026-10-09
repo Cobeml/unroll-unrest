@@ -15,3 +15,9 @@ Distances and 20-ft proximity context are imported estimates, not legal verdicts
 
 Three.js 0.160.0 and OrbitControls are vendored under the MIT license.
 See vendor/THREE-LICENSE.txt. OrbitControls imports were changed to a local path.
+
+Pinned upstream submodule: third_party/unfold-unrest @
+98703a5cd57748adc8849e534a894d7ac5845f17.
+The current UI keeps the upstream 3D rendering and story choreography while
+replacing the scrolling presentation with fixed-viewport recommendation tabs.
+The VM coordinator adds durable existing-archive processing and source checksums.
