@@ -6,6 +6,8 @@ from recommendations import build_recommendations
 
 # Match discovered filenames, never construct deployment-specific S3 paths.
 DEMO_ANCHORS = {
+    'bottleneck':('20261008_074847_GX050001_chunk_0005_segment_004_of_006.mp4',
+                  'Parked red sedan obstructs the riding path; rider maneuvers around it'),
     'passage':('20261008_072535_GOPR0130_chunk_0004_segment_005_of_006.mp4',
                'Delivery trucks partially blocking the street while cycling'),
     'crossing':('20261008_074241_GX010001_chunk_0014_segment_002_of_006.mp4',
@@ -110,7 +112,11 @@ def demo(vss, name):
         for row in chunk.get('timeline',[]):
             if row.get('source','').rsplit('/',1)[-1]==filename:
                 clip=vss.register({**{k:v for k,v in chunk.items() if k!='timeline'},**row})
-                result=analytics([clip],available_clips=1,available_cameras=1)
+                neighbors=[vss.register({**{k:v for k,v in chunk.items() if k!='timeline'},**r})
+                           for r in chunk.get('timeline',[])]
+                neighbors=[c for c in neighbors if c]
+                result=analytics(neighbors,available_clips=len(neighbors),available_cameras=1)
                 result['demo']={'name':name,'query':query,'verified_anchor':True}
+                result['selected_segment_id']=clip['id']
                 return result
     raise BadFilter('This preset is no longer present in the indexed archive.')

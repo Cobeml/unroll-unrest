@@ -39,6 +39,7 @@ class VSS:
         self.lock = threading.RLock()
         self.cache = Cache()
         self.segments = {}
+        self.search_requires_synthesis = False
 
     def login(self, expired=None):
         with self.lock:
@@ -161,13 +162,22 @@ class VSS:
                     'available':True, 'frames':x.get('frames', []), 'segment_id':segment_id}
         return self.cache.get(('detections',segment_id), load)
 
-    def search(self, query, filters):
-        x = self.request('search', data={
-            'query':query, 'top_k':30, 'llm_top_n':1, 'min_similarity':0.3,
+    def search(self, query, filters, *, top_k=30, llm_top_n=0):
+        data={
+            'query':query, 'top_k':top_k, 'llm_top_n':max(1,llm_top_n) if self.search_requires_synthesis else llm_top_n, 'min_similarity':0.3,
             'time_filter':filters['time_filter'],
             'metadata_filters':filters['metadata_filters'],
             **{k:v for k,v in filters.items() if k.startswith('custom_')},
-            'include_public':True})
+            'include_public':True}
+        try:
+            x = self.request('search', data=data)
+        except UpstreamError as error:
+            if error.status!=422 or data['llm_top_n']!=0:raise
+            # This deployed VSS validates llm_top_n >= 1. Ignore its synthesized
+            # narrative and retain only segment rows for the separate diagnosis.
+            self.search_requires_synthesis=True
+            data['llm_top_n']=1
+            x=self.request('search',data=data)
         return [self.register(row) for row in x.get('results', []) if row.get('source')]
 
 

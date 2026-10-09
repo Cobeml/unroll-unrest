@@ -134,7 +134,7 @@ class PolicyRouteTests(unittest.TestCase):
         clips=fixture();events=validate_findings(json.dumps(proposal(clips)),clips)
         data={'clips':clips,'recommendations':build_recommendations(clips,events),'bottlenecks':events}
         review_id=data['recommendations'][0]['id']
-        with patch('main.vss.metadata',return_value={}),patch('main.sample',return_value=data):
+        with patch('main.vss.metadata',return_value={}),patch('main.analyses.start',return_value={'id':'a'*16,'status':'complete'}),patch('main.analyses.result',return_value=data):
             with app.test_client() as client:
                 with client.get('/policy/'+review_id) as page:
                     self.assertEqual(page.status_code,200)
