@@ -1,71 +1,22 @@
 <!doctype html>
 <html lang="en" data-theme="light">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Unfold — Crosswalk Sightlines</title>
-<base href="{{ public_path }}">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unfold — Street insights</title><base href="{{ public_path }}">
 <link rel="stylesheet" href="assets/ride.css?v={{ asset_version }}">
 <script type="module" src="assets/ride.js?v={{ asset_version }}"></script>
-
 </head>
 <body>
-<header class="topbar"><a class="brand" href="./" aria-label="Unfold home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m4 24 7-5 10 5 7-5V6l-7 5-10-5-7 5v13Z M11 6v13 M21 11v13" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Unfold</a><span class="edition">Crosswalk sightlines</span><nav><a href="#crossings">Crossings ↓</a><a href="archive">Video archive ↗</a></nav></header>
+<header class="topbar"><a class="brand" href="./" aria-label="Unfold home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m4 24 7-5 10 5 7-5V6l-7 5-10-5-7 5v13Z M11 6v13 M21 11v13" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>Unfold</a><span class="edition">See the street. Clear the way.</span><nav><a class="find-button" href="discover">Find risk clips <span aria-hidden="true">↗</span></a></nav></header>
 <div id="error-banner" class="error-banner" role="alert" hidden></div>
-<section id="policy-report" class="policy-report" hidden></section>
-<main class="cockpit" aria-label="The ride, rebuilt in 3D">
-  <div id="stage" aria-label="The street rebuilt in 3D from the video"></div>
-  <div class="scrim"></div>
-  <div class="speed" id="speed" aria-hidden="true">Slowed down at the crossing</div>
-  <header class="head">
-    <a class="back" href="#crossings">One ride. Every crossing.</a>
-    <h1 id="headline">Checking the crosswalks on this ride…</h1>
-    <p class="sub" id="sub"></p>
-    <button class="go" id="go">Play the ride</button>
-  </header>
-  <figure class="pip">
-    <div class="frame"><video id="vid" playsinline muted preload="auto"></video><canvas id="ov"></canvas></div>
-    <figcaption><span>Indexed rider video</span><button id="overlay-mode">Sightlines</button></figcaption>
-  </figure>
-  <section class="card" id="card" aria-live="polite"></section>
-  <canvas class="mini" id="mini" aria-label="The street from above"></canvas>
-  <div class="bar">
-    <button id="play">Play</button>
-    <canvas id="scrub" tabindex="0" aria-label="Ride timeline: click or drag to move through the ride"></canvas>
-    <span class="clock" id="clock">0.0 s</span>
-    <div class="views" role="group" aria-label="Camera">
-      <button data-view="director" aria-pressed="true">Story</button>
-      <button data-view="chase" aria-pressed="false">Behind the rider</button>
-      <button data-view="overview" aria-pressed="false">Whole street</button>
-      <button data-view="free" aria-pressed="false">Look around</button>
-      <button id="seen" aria-pressed="true">What the rider saw</button>
-      <button id="cloud" aria-pressed="true">3D points</button>
-    </div>
-  </div>
+<main class="cockpit" aria-label="The street story">
+<div id="stage" aria-label="The street rebuilt in 3D from indexed video"></div><div class="scrim"></div>
+<header class="head"><p class="eyebrow">Insights &amp; recommendations</p><h1 id="headline">Rebuilding the street…</h1><div id="recommendations"></div><p class="sub" id="sub"></p><button class="go" id="go">Play the story</button></header>
+<div class="speed" id="speed" aria-hidden="true">Crossing · 0.4×</div>
+<section class="card" id="card" aria-live="polite"></section>
+<canvas class="mini" id="mini" aria-label="The street from above"></canvas>
+<div class="bar"><button id="play">Play</button><canvas id="scrub" tabindex="0" aria-label="Ride timeline; click or drag to seek"></canvas><span class="clock" id="clock">0.0 s</span><div class="views" role="group" aria-label="Camera"><button data-view="director" aria-pressed="true">Story</button><button data-view="chase" aria-pressed="false">Rider</button><button data-view="overview" aria-pressed="false">Street</button><button data-view="free" aria-pressed="false">Explore</button><button id="seen" aria-pressed="true">Sightlines</button><button id="cloud" aria-pressed="true">Points</button></div></div>
 </main>
-<section class="read">
-  <div class="read-wrap">
-<div id="demo-stats" class="demo-stats"></div>
-<section class="recommendations"><h2>Clear the sightline</h2><div id="recommendations"></div></section>
-<details class="process"><summary>From video to a crossing check</summary>
-    <h2>How the check works</h2>
-    <p id="lede"></p>
-    <div class="key">
-      <span><i style="background:var(--curb)"></i>hidden where stopping must start</span>
-      <span><i style="background:var(--line)"></i>partly hidden</span>
-      <span><i style="background:var(--lane)"></i>in view in time</span>
-      <span><i style="background:#7d8285"></i>not judged, or the two checks disagree</span>
-      <span><i style="background:rgba(255,240,196,.6)"></i>ground the rider could see</span>
-      <span><i style="background:rgba(224,54,44,.7)"></i>ground hidden from the rider; stopped vehicle</span>
-      <span><i style="background:rgba(245,197,24,.7)"></i>hedge, planter or shelter</span>
-    </div>
-    </details>
-<h2 id="crossings">Every crossing on this ride</h2>
-    <ol class="xlist" id="xlist"></ol>
-    <p class="foot" id="foot"></p>
-  </div>
-</section>
-
-<footer class="demo-footer"><span>Unfold / Saved ride demo</span><span id="source-label"></span></footer>
-</body>
-</html>
+<section id="policy-report" class="policy-report" hidden aria-label="Recommendation detail"></section>
+<figure class="pip" id="evidence-video" hidden><div class="frame"><video id="vid" playsinline muted preload="auto"></video><canvas id="ov"></canvas></div><figcaption><span>Indexed video</span><button id="overlay-mode">Sightlines</button></figcaption></figure>
+</body></html>

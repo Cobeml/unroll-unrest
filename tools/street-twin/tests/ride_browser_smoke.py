@@ -1,58 +1,63 @@
-"""Opt-in real archive/map browser check. Set UNFOLD_TEST_BASE to the running app."""
+"""Opt-in browser acceptance against real saved map, archive playback and discovery."""
 import os
 from playwright.sync_api import sync_playwright
 base=os.environ.get('UNFOLD_TEST_BASE','http://127.0.0.1:8128/')
-errors=[];failed=[]
+errors=[]
+def fits(page):
+ assert page.evaluate('document.documentElement.scrollWidth<=innerWidth && document.documentElement.scrollHeight<=innerHeight'),'page scrolls'
+ assert page.evaluate("[...document.querySelectorAll('.report-content,.workspace,.run-layout')].filter(e=>e.offsetParent).every(e=>e.scrollHeight<=e.clientHeight+2)"),'panel overflows'
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path='/usr/bin/google-chrome',headless=False,args=['--no-sandbox','--disable-dev-shm-usage','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
- page=browser.new_page(viewport={'width':1440,'height':1000})
+ page=browser.new_page(viewport={'width':1440,'height':900})
  page.on('pageerror',lambda e:errors.append(str(e)))
- page.on('requestfailed',lambda r:failed.append(r.url.split('/api/')[-1].split('?')[0]))
  page.goto(base,wait_until='domcontentloaded',timeout=30000)
  page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
- assert page.title()=='Unfold — Crosswalk Sightlines'
  assert page.locator('#error-banner').is_hidden()
- assert len(page.locator('.xi').all())==3
- assert 'hedge' in page.locator('#headline').inner_text()
- assert '5 m' in page.locator('#headline').inner_text()
- assert '10 m' in page.locator('#headline').inner_text()
- assert 'disagrees' in page.locator('.xi').nth(1).inner_text()
  assert len(page.locator('.recommendation').all())==1
  assert 'Trim the hedge' in page.locator('.recommendation').inner_text()
+ assert page.locator('#evidence-video').is_hidden()
  assert page.locator('#stage canvas').is_visible()
  assert page.evaluate('getComputedStyle(document.body).fontFamily').startswith('Georgia')
  assert page.evaluate('getComputedStyle(document.body).backgroundColor')=='rgb(244, 242, 235)'
- page.screenshot(path='/tmp/unfold-demo-opening.png',full_page=True)
+ fits(page);page.screenshot(path='/tmp/unfold-fullscreen-story.png')
  page.locator('#go').click()
  page.wait_for_function('document.getElementById("vid").currentTime>1',timeout=30000)
  page.evaluate('document.getElementById("vid").pause();window.UnfoldDemo.seek(16.25)')
  page.wait_for_function('document.getElementById("vid").currentTime>16',timeout=30000)
- page.wait_for_timeout(400)
- assert 'hedge' in page.locator('#card').inner_text()
- page.screenshot(path='/tmp/unfold-demo-crossing.png',full_page=True)
- print('Matched indexed parent, crossing story, map, sightline strips, review disagreement and recommendation passed',flush=True)
- with page.expect_response(lambda r:'/api/detections/' in r.url,timeout=30000) as response:
-  page.locator('#overlay-mode').click()
- data=response.value.json();assert data.get('available');assert len(data.get('frames',[]))>0
- page.wait_for_timeout(200)
- print('Archive YOLO frames:',len(data['frames']),flush=True)
- page.get_by_role('button',name='Look around',exact=True).click()
- assert page.get_by_role('button',name='Look around',exact=True).get_attribute('aria-pressed')=='true'
- page.locator('#seen').click();assert page.locator('#seen').get_attribute('aria-pressed')=='false'
- page.locator('#cloud').click();assert page.locator('#cloud').get_attribute('aria-pressed')=='false'
- page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(300)
- assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),'mobile overflow'
- page.screenshot(path='/tmp/unfold-demo-mobile.png',full_page=True)
- page.locator('.recommendation').click()
- page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
- assert page.locator('#policy-report').is_visible()
+ page.wait_for_timeout(300);assert '97%' in page.locator('#card').inner_text()
+ page.screenshot(path='/tmp/unfold-fullscreen-crossing.png')
+ page.get_by_role('button',name='Explore',exact=True).click()
+ assert page.get_by_role('button',name='Explore',exact=True).get_attribute('aria-pressed')=='true'
+ for viewport in [{'width':390,'height':844},{'width':390,'height':600}]:
+  page.set_viewport_size(viewport);fits(page)
+ page.set_viewport_size({'width':1440,'height':900})
+ page.locator('.recommendation').click();page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
  assert page.locator('#policy-report h1').inner_text()=='Trim the hedge at crossing 2'
- assert len(page.locator('.evidence-link').all())==2
- assert page.locator('#policy-report img').is_visible()
- page.screenshot(path='/tmp/unfold-demo-policy.png',full_page=True)
+ for viewport in [{'width':1440,'height':900},{'width':390,'height':844},{'width':390,'height':600}]:
+  page.set_viewport_size(viewport)
+  for name in ['Action','Statistics','Frames','Review','Source','Video']:
+   page.get_by_role('tab',name=name,exact=True).click();fits(page)
+   if name=='Review':
+    first=page.locator('#report-content').inner_text()
+    button=page.get_by_role('button',name='Next side')
+    if button.is_disabled():button=page.get_by_role('button',name='Previous side')
+    button.click()
+    both=first+page.locator('#report-content').inner_text()
+    assert 'rejected' in both and 'confirmed' in both;fits(page)
+  page.get_by_role('tab',name='Action',exact=True).click()
+ page.set_viewport_size({'width':1440,'height':900});page.get_by_role('tab',name='Video',exact=True).click()
+ assert page.locator('#vid').is_visible()
+ with page.expect_response(lambda r:'/api/detections/' in r.url,timeout=30000) as response:page.locator('#overlay-mode').click()
+ assert response.value.json()['available']
+ page.get_by_role('tab',name='Frames',exact=True).click();page.screenshot(path='/tmp/unfold-recommendation-frames.png')
  page.reload(wait_until='domcontentloaded');page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
- page.wait_for_function('document.getElementById("vid").currentTime>16',timeout=30000)
  assert page.locator('#policy-report').is_visible()
+ page.get_by_role('link',name='Find risk clips').click()
+ page.wait_for_selector('.candidate',timeout=60000)
+ for viewport in [{'width':1440,'height':900},{'width':390,'height':844},{'width':390,'height':600}]:
+  page.set_viewport_size(viewport);fits(page)
+ page.locator('.candidate').first.click();assert page.locator('#preview-video').is_visible();fits(page)
+ page.screenshot(path='/tmp/unfold-discovery-mobile.png')
  assert not errors,errors
- print('Orbit/layers, mobile, recommendation page, evidence links and deep-link reload passed; failed requests:',len(failed),flush=True)
+ print('Fullscreen story, all recommendation tabs, indexed video/YOLO, deep links, discovery and mobile no-scroll checks passed.',flush=True)
  browser.close()

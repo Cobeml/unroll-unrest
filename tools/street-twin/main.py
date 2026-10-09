@@ -30,7 +30,7 @@ def app_shell(template='index.html'):
     if not re.fullmatch(r'/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*', prefix) or any(p in {'.', '..'} for p in prefix.split('/')):
         prefix = app.config['PUBLIC_PATH']
     public_path = prefix.rstrip('/') + '/'
-    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css','cockpit.js','ride.js','ride.css'])).hexdigest()[:12]
+    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css','cockpit.js','ride.js','ride.css','discover.js'])).hexdigest()[:12]
     response = Response(render_template_string((ROOT / template).read_text(), public_path=public_path, asset_version=version), mimetype='text/html')
     response.headers['Cache-Control'] = 'no-store'
     return response

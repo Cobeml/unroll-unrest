@@ -8,7 +8,10 @@ const $ = id => document.getElementById(id);
 const href = p => new URL(p,document.baseURI).href;
 const escape = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function read(p,options={}) { const r=await fetch(href(p),options); if(!r.ok)throw new Error('Demo data unavailable. Refresh to retry.'); return r.json(); }
-const D = await read('api/ride');
+const sceneId=location.pathname.match(/\/rides\/([A-Za-z0-9_-]+)/)?.[1];
+const D = await read(sceneId?'api/rides/'+sceneId:'api/ride');
+const ridePath='rides/'+D.scene_id;
+const analysisPath=sceneId?'api/rides/'+sceneId+'/analysis':'api/ride/analysis';
 const base = '';
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -46,35 +49,15 @@ function hiders(e) {                        // "a hedge", "3 hedges", "4 lamp po
 }
 const TAIL = 1.0;                           // s past the crossing the inspection lasts
 
-// ---- words ----
-{
-  const bad = cws.filter(c => level(worst(c)) === 'hidden').concat(cws.filter(c => level(worst(c)) === 'part'));
-  const none = cws.filter(c => !judged(c));
-  const whys = none.map(c => { const w = c.ends.map(e => e.why || '').join(' ');
-    return w.includes('starts') ? `crossing ${c.n} is where the ride starts` : w.includes('turning') ? `at crossing ${c.n} the bike was turning hard`
-         : w.includes('farther out') ? `at crossing ${c.n} the rider was too fast: stopping takes longer than the ${WIN} m the rebuild can judge`
-         : `the camera did not face crossing ${c.n} from far enough out`; });
-  if (bad.length) {
-    const c = bad[0], w = worst(c), b = w.blockers[0] && byId[w.blockers[0].id];
-    $('headline').innerHTML = level(w) === 'hidden'
-      ? `At crossing ${c.n}, ${b ? 'a ' + nameOf(b) : 'something'} hides the ${w.side} side from the rider until <span class="count">${mm(w.clear_from_m ?? 0)}</span> out. Stopping takes ${mm(w.needed_m)}.`
-      : `At crossing ${c.n}, <span class="count">${pct(1 - w.seen_at_stop)}</span> of the ${w.side} side is hidden from the rider where stopping must start.`;
-  } else $('headline').textContent = S.crossings_judged ? `The rider could see both sides of every crossing in time.` : `No crossing on this ride could be judged.`;
-  $('sub').textContent = `What the handlebar camera could see of each crossing on the way in. ${S.crossings_judged} of ${S.crosswalks} crossings could be judged` +
-    (whys.length ? `: ${list(whys)}.` : '.');
-}
-$('sub').textContent = `${S.crosswalks} crossings · ${S.crossings_judged} assessed · ${Math.round(S.duration)} seconds of indexed footage. Distances are estimates.`;
-$('lede').textContent = 'A bike ride becomes a street model. Check what screens each crossing, compare visibility with the stopping model, then open the frames that support a maintenance proposal.';
-$('foot').textContent = `Geometry uses an assumed ${CAM_H} m handlebar-camera height. The stopping model assumes ${RULES.react_s} s reaction time and ${RULES.decel} m/s² braking. Visibility is checked within ${WIN} m, for a ${TH} m-high waiting area, with a ${pct(CLEAR)} in-view threshold. These are model estimates, not measured speeds or a safety/legal verdict. Standing vehicles may be parked or waiting. A vision review that rejects a spatial claim is retained as a disagreement.`;
-$('demo-stats').innerHTML = [[S.crosswalks,'crossings'],[S.crossings_judged,'assessed'],[S.stopped,'standing vehicles'],[Math.round(S.distance)+' m','estimated route']].map(([v,label])=>`<div><strong>${escape(v)}</strong><span>${label}</span></div>`).join('');
-
+// The story leads with the action; detail stays on its own page.
+$('headline').textContent=D.findings?.length?'A clearer crossing.':'The street, reconstructed.';
+$('sub').textContent=`${S.crosswalks ?? cws.length} crossings · ${S.crossings_judged ?? 0} assessed · ${Math.round(S.duration)} seconds`;
 function title(c) {
-  const w = worst(c), lv = level(w), b = w.blockers[0] && byId[w.blockers[0].id];
-  if (lv === 'none') return `Not judged: ${escape(w.why)}`;
-  if (lv === 'disputed') return `Unclear: the 3D check and the vision check disagree on the ${w.side} side`;
-  if (lv === 'clear') return c.ends.every(e => e.covered) ? 'Both sides in view in time' : `The ${w.side} side was in view in time`;
-  if (lv === 'part') return `The ${w.side} side is ${pct(1 - w.seen_at_stop)} hidden at modeled stopping distance`;
-  return `${cap(b ? 'a ' + nameOf(b) : 'something')} hides the ${w.side} side until ${w.clear_from_m == null ? 'the crossing' : mm(w.clear_from_m) + ' out'}`;
+ const w=worst(c),lv=level(w);
+ if(lv==='none')return 'Approach not assessed';
+ if(lv==='disputed')return 'Checks disagree';
+ if(lv==='clear')return 'Waiting area in view';
+ return `${cap(w.side)} waiting area · ${pct(1-w.seen_at_stop)} hidden`;
 }
 function strip(e) {                          // the way in, WIN m out on the left to the crossing on the right
   const F = e.frames.filter(f => f.counted && f.seen != null).sort((a, b) => b.d - a.d);
@@ -87,37 +70,8 @@ function strip(e) {                          // the way in, WIN m out on the lef
   return `<div class="meter strip" role="img" aria-label="${label}">${segs}<b class="stop" style="left:${X(e.needed_m)}"></b></div>` +
          `<div class="scale"><span>${WIN} m out</span><span>white mark: stopping must start</span><span>crossing</span></div>`;
 }
-function endHTML(e) {
-  const side = `${cap(e.side)} side`;
-  if (!e.covered) return `<div><div class="ap-h"><span>${side}</span><span>not judged</span></div><div class="meter off"></div><p class="why">${escape(cap(e.why))}.</p></div>`;
-  const lv = level(e);
-  const note = lv === 'clear' ? `in view at ${mm(e.stop_d)}` : lv === 'disputed' ? `disputed` : `${pct(1 - e.seen_at_stop)} hidden at ${mm(e.stop_d)}`;
-  const when = e.clear_from_m == null ? `Never fully in view before it left the camera's view.` : lv === 'clear' ? `In view from ${mm(Math.max(e.clear_from_m, e.stop_d))} or more.` : `Fully in view only from ${mm(e.clear_from_m)}.`;
-  const by = lv === 'hidden' || lv === 'part' ? ` Hidden by ${hiders(e)}.` : '';
-  const rv = e.review ? (e.review.claim === 'confirmed' ? ` A vision model shown these frames agrees: ${escape(e.review.reason)}`
-                        : e.review.claim === 'rejected' ? ` The 3D check put ${pct(1 - e.seen_at_stop)} of it out of view at ${mm(e.stop_d)}, but a vision model shown these frames disagrees: ${escape(e.review.reason)}`
-                        : ` A vision model shown these frames could not tell: ${escape(e.review.reason)}`) : '';
-  const zn = {};
-  e.blockers.filter(b => b.in_20ft).forEach(b => { const k = nameOf(byId[b.id]); zn[k] = (zn[k] || 0) + 1; });
-  const zl = Object.entries(zn).map(([k, n]) => n === 1 ? `a ${k}` : `${n} ${k}s`), many = Object.values(zn).reduce((a, b) => a + b, 0) > 1;
-  const z = lv !== 'clear' && zl.length ? ` ${cap(list(zl))} ${many ? 'stand' : 'stands'} in the 20 ft before the crossing.` : '';
-  return `<div><div class="ap-h"><span>${side}</span><span>${note}</span></div>${strip(e)}<p class="why">${lv === 'disputed' ? '' : when + by + z}${rv}</p></div>`;
-}
 function cardHTML(c) {
-  const w = c.ends.find(e => e.covered) || c.ends[0];
-  return `<div class="ch"><span class="disc">${c.n}</span><div><h2>${title(c)}</h2>` +
-         `<p>Crossing ${c.n} at ${c.t_edge.toFixed(1)} s, estimated ${Math.round(w.speed_kmh)} km/h: estimated stopping distance ${mm(w.needed_m)}</p></div></div>` +
-         `<div class="aps">${c.ends.map(endHTML).join('')}</div>`;
-}
-function renderList() {
-$('xlist').innerHTML = cws.map(c => `<li class="xi ${verdict(c)}" tabindex="0" data-id="${c.id}"><div>${cardHTML(c)}</div><div class="shots">` +
-  c.ends.filter(e => e.evidence).map(e => `<figure><img onload="this.naturalWidth < 1000 && this.classList.add('one')" src="${base + e.evidence}" alt="The ${e.side} side of crossing ${c.n} as the camera saw it on the way in" loading="lazy">` +
-    `<figcaption>${cap(e.side)} side: the camera's view where stopping must start${e.clear_k != null && e.clear_k !== e.stop_k ? ', and where it came fully into view' : ''}. The box is a ${TH} m tall patch where someone about to cross would stand.</figcaption></figure>`).join('') +
-  `</div></li>`).join('');
-document.querySelectorAll('.xi').forEach(el => {
-  const go = () => { const c = byId[+el.dataset.id]; scrollTo({ top: 0, behavior: still ? 'auto' : 'smooth' }); seek(Math.max(0, (c.tw0 ?? c.t_pass) - .3)); start(); };
-  el.onclick = go; el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
-});
+ return `<div class="ch"><span class="disc">${c.n}</span><div><h2>${title(c)}</h2><p>Crossing ${c.n} · spatial estimate</p></div></div><div class="aps">${c.ends.map(e=>`<div><div class="ap-h"><span>${cap(e.side)}</span><span>${!e.covered?'Not assessed':level(e)==='disputed'?'Review disagrees':pct(e.seen_at_stop)+' in view'}</span></div>${e.covered?strip(e):'<div class="meter off"></div>'}</div>`).join('')}</div>`;
 }
 
 // ---- the ride: pose at time t, distance along it ----
@@ -143,7 +97,7 @@ cws.forEach(c => {
 });
 const inWindow = (c, t) => judged(c) && t >= c.tw0 && t <= c.tw1;
 const inspecting = t => cws.find(c => inWindow(c, t)) || null;
-renderList();
+
 
 // ---- the street in 3D (plan metres, z up) ----
 const stage = $('stage');
@@ -398,7 +352,7 @@ function updateCard(t) {
   const card = $('card');
   card.className = 'card ' + (c ? verdict(c) : '');
   card.innerHTML = c ? cardHTML(c)
-    : nx ? `<p class="next">Crossing ${nx.n} in ${Math.max(0, Math.round(nx.s_edge - rider(t).s))} m</p><p class="hint">Light ground is what the rider could see, red what was hidden. Space plays or pauses; the arrow keys jump between crossings.</p>`
+    : nx ? `<p class="next">Crossing ${nx.n} in ${Math.max(0, Math.round(nx.s_edge - rider(t).s))} m</p><p class="hint">Light: in view · Red: hidden · Yellow: obstruction</p>`
          : `<p class="next">End of the ride</p><p class="hint">${S.crosswalks} crossings over ${Math.round(S.distance)} m; ${S.crossings_judged} could be judged.</p>`;
   void card.offsetWidth; card.classList.add('fresh');
 }
@@ -497,7 +451,7 @@ function drawOverlay(t) {
 // ---- controls ----
 function seek(t) { vid.currentTime = Math.min(S.duration, Math.max(0, t)); }
 function begin() { started = true; $('go').hidden = true; document.querySelector('.cockpit').classList.add('playing'); }
-function start() { begin(); vid.play(); }
+function start() { begin(); vid.play().catch(()=>{ $('error-banner').hidden=false;$('error-banner').textContent='Playback unavailable. The map and recommendation evidence remain available.'; }); }
 $('go').onclick = start;
 $('play').onclick = () => { if (!started || vid.paused) start(); else vid.pause(); };
 vid.onplay = () => { begin(); $('play').textContent = 'Pause'; };
@@ -537,19 +491,55 @@ function warmDetections(t){const clip=currentClip(t);if(!clip||clip.id===detecti
 function drawYOLO(ctx,t,W,H){warmDetections(t);const clip=currentClip(t),data=detectionCache.get(clip?.id);if(!data?.available)return;const local=t-clip.start_sec,frames=data.frames||[];const f=frames.reduce((best,f)=>Math.abs((f.time_sec??f.timestamp_sec??f.frame_index/(data.fps||30))-local)<Math.abs((best?.time_sec??best?.timestamp_sec??best?.frame_index/(data.fps||30)??1e9)-local)?f:best,null);if(!f||Math.abs((f.time_sec??f.timestamp_sec??0)-local)>.15)return;const shape=f.shape||data.video_shape||[1080,1920],sx=W/(shape[1]||1920),sy=H/(shape[0]||1080);ctx.font='13px Georgia, serif';for(const o of f.detections||[]){if((o.confidence??0)<.5)continue;const b=o.bbox||o.box;if(!b||b.length!==4)continue;ctx.strokeStyle='#90cfe3';ctx.fillStyle='#90cfe3';ctx.lineWidth=2;ctx.strokeRect(b[0]*sx,b[1]*sy,(b[2]-b[0])*sx,(b[3]-b[1])*sy);ctx.fillText(o.class_name||o.label||'object',b[0]*sx,b[1]*sy-4);}}
 $('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overlayMode==='yolo'?'none':'spatial';$('overlay-mode').textContent=overlayMode==='spatial'?'Sightlines':overlayMode==='yolo'?'YOLO objects':'No overlays';if(overlayMode==='yolo')warmDetections(vid.currentTime);};
 const findings=D.findings||[];
-$('recommendations').innerHTML=findings.length?findings.map(f=>`<a class="recommendation" href="${href('finding/'+f.id)}"><div><span class="trace-label">Crossing ${f.crossing} · ${f.review.claim==='confirmed'?'Vision review agrees':'Needs inspection'}</span><h3>${escape(f.title)}</h3><p>${escape(f.action)}</p></div><span class="arrow">↗</span></a>`).join(''):'<p>No maintenance proposal has passed the saved checks.</p>';
-const findingId=location.pathname.match(/\/finding\/(crossing-[0-9]+-(?:left|right))/)?.[1];
+$('recommendations').innerHTML=findings.length?findings.map(f=>`<a class="recommendation" href="${href(ridePath+'/recommendations/'+f.id)}"><span>${escape(f.title)}</span><span aria-hidden="true">↗</span></a>`).join(''):'<p class="empty-insight">No supported maintenance action found.</p>';
+const findingId=location.pathname.match(/\/(?:finding|recommendations)\/(crossing-[0-9]+-(?:left|right))/)?.[1];
 const finding=findings.find(f=>f.id===findingId);
-function renderReport(f){
- $('policy-report').hidden=false;
- $('policy-report').innerHTML=`<a href="${href('./')}">← Back to the ride</a><p class="trace-label">Crossing ${f.crossing} · Imported vision review ${escape(f.review.claim)}</p><h1>${escape(f.title)}</h1><p>${escape(f.action)}</p><div class="policy-metrics"><div><strong>${pct(f.metrics.hidden_fraction)}</strong><span>waiting area hidden · estimate</span></div><div><strong>${mm(f.metrics.estimated_stop_m)}</strong><span>modeled stopping distance</span></div><div><strong>${f.metrics.estimated_clear_m==null?'—':mm(f.metrics.estimated_clear_m)}</strong><span>fully in view · estimate</span></div></div><h2>Frames behind the finding</h2><p>${escape(f.review.reason)}</p>${f.evidence_url?`<img src="${href(f.evidence_url)}" alt="Crossing ${f.crossing}, ${f.side} side: stopping-distance frame and later visible frame">`:''}<div class="evidence-links">${f.segment_refs.map(r=>`<a class="evidence-link" href="${href('./')}?t=${r.start_sec.toFixed(2)}">${r.start_sec.toFixed(1)}–${r.end_sec.toFixed(1)}s · ${escape(r.camera_id)} ↗</a>`).join('')}</div><details><summary>Source, clip IDs and assumptions</summary><p>${escape(D.source_filename)} · ${escape(D.clips[0].camera_id)} · ${escape(D.clips[0].location)}</p>${f.segment_refs.map(r=>`<p>Segment ${r.segment_id} · ${r.start_sec.toFixed(2)}–${r.end_sec.toFixed(2)}s</p>`).join('')}<p>${escape(f.limitations)}</p><p>Map ${escape(D.scene_id)} · Qwen vision review imported from UnfoldUnrest. Cosmos reasoning reads the same indexed video separately.</p></details><button id="cosmos-analysis" class="cosmos-button">Read Cosmos video analysis ↗</button><p id="cosmos-result" class="cosmos-result" role="status"></p>`;
- $('cosmos-analysis').onclick=async()=>{const b=$('cosmos-analysis');b.disabled=true;$('cosmos-result').textContent='Reading indexed video…';try{const d=await read('api/ride/analysis',{method:'POST'});$('cosmos-result').textContent=d.answer;}catch{$('cosmos-result').textContent='Video analysis unavailable. Saved evidence remains available.';}finally{b.disabled=false;}};
+function paginateText(container,text){
+ const words=String(text).split(/\s+/),pages=[],size=innerHeight<700?40:65;for(let i=0;i<words.length;i+=size)pages.push(words.slice(i,i+size).join(' '));
+ let page=0;const render=()=>{container.innerHTML=`<p class="analysis-copy">${escape(pages[page]||'No analysis available.')}</p><div class="pager"><button id="analysis-prev" ${page===0?'disabled':''}>Previous</button><span>${page+1} / ${Math.max(1,pages.length)}</span><button id="analysis-next" ${page>=pages.length-1?'disabled':''}>Next</button></div>`;container.querySelector('#analysis-prev').onclick=()=>{page--;render();};container.querySelector('#analysis-next').onclick=()=>{page++;render();};};render();
 }
-if(findingId&&!finding)throw new Error('This finding is unavailable. Return to the ride.');
+function renderReport(f){
+ document.body.classList.add('detail');$('policy-report').hidden=false;
+ $('policy-report').innerHTML=`<header class="report-head"><a href="${href(ridePath)}?t=${f.scene_time_sec}">← Street story</a><span class="eyebrow">Crossing ${f.crossing} · ${escape(f.side)}</span><h1>${escape(f.title)}</h1></header><div class="report-tabs" role="tablist" aria-label="Recommendation evidence">${['Action','Statistics','Frames','Video','Review','Cosmos','Source'].map((label,i)=>`<button role="tab" id="tab-${label.toLowerCase()}" aria-controls="report-content" aria-selected="${i===0}" data-tab="${label.toLowerCase()}">${label}</button>`).join('')}</div><div class="report-content" id="report-content" role="tabpanel" aria-labelledby="tab-action"></div>`;
+ const content=$('report-content');let sourcePage=0,reviewPage=0;
+ const reviews=cws.find(c=>c.id===f.object_id)?.ends.filter(e=>e.review)||[];
+ function tab(which){
+  const figure=$('evidence-video');document.body.appendChild(figure);
+  figure.hidden=which!=='video';vid.pause();
+  document.querySelectorAll('[data-tab]').forEach(b=>{b.setAttribute('aria-selected',b.dataset.tab===which);b.tabIndex=b.dataset.tab===which?0:-1;});
+  content.setAttribute('aria-labelledby','tab-'+which);
+  if(which==='action')content.innerHTML=`<span class="eyebrow">Maintenance proposal</span><h2>Clear the waiting area from view obstructions.</h2><p class="large-copy">${escape(f.action)}</p><p class="small-note">${escape(f.limitations)}</p><button class="primary" id="show-frames">See the supporting frames ↗</button>`;
+  if(which==='statistics')content.innerHTML=`<p class="eyebrow">Imported spatial estimates</p><div class="policy-metrics">${[[pct(f.metrics.hidden_fraction),'waiting area hidden'],[mm(f.metrics.estimated_stop_m),'modeled stopping distance'],[f.metrics.estimated_clear_m==null?'—':mm(f.metrics.estimated_clear_m),'fully in view']].map(([v,l])=>`<div><strong>${v}</strong><span>${l}</span></div>`).join('')}</div><p>From the ${escape(f.side)} approach at ${f.scene_time_sec.toFixed(1)} s. These values use an assumed camera height, not a calibrated survey.</p><p class="small-note">${S.stopped ?? 0} standing vehicle footprints · ${D.objects.filter(o=>o.motion==='moving').length} moving · ${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='unknown').length} uncertain. Standing does not distinguish parking from queuing.</p>`;
+  if(which==='frames')content.innerHTML=`<figure class="review-image">${f.evidence_url?`<img src="${href(f.evidence_url)}" alt="${escape(f.side)} waiting area at modeled stopping distance, compared with the later approach">`:'<p>No frame export available.</p>'}<figcaption>At modeled stopping distance / later on the approach · imported review ${escape(f.review.claim)}</figcaption></figure>`;
+  if(which==='video'){
+   content.innerHTML=`<div class="video-slot"></div><div class="evidence-links">${f.segment_refs.map(r=>`<button class="evidence-link" data-seek="${r.start_sec}">${r.start_sec.toFixed(1)}–${r.end_sec.toFixed(1)} s · ${escape(r.camera_id)}</button>`).join('')}</div>`;
+   content.querySelector('.video-slot').appendChild($('evidence-video'));seekWhenReady(f.scene_time_sec);vid.controls=true;
+   content.querySelectorAll('[data-seek]').forEach(b=>b.onclick=()=>{seek(Number(b.dataset.seek));vid.play().catch(()=>{});});
+  }else{document.body.appendChild($('evidence-video'));vid.controls=false;}
+  if(which==='review'){
+   const e=reviews[reviewPage],review=e?.review;
+   content.innerHTML=`<span class="eyebrow">Independent frame review</span><h2>${cap(e?.side||f.side)} side · ${escape(review?.claim||'Not reviewed')}</h2><div id="review-copy"></div><p class="small-note">Rejected claims are retained and excluded from maintenance actions.</p><div class="pager"><button id="review-prev" ${reviewPage===0?'disabled':''}>Previous side</button><span>${reviewPage+1} / ${Math.max(1,reviews.length)}</span><button id="review-next" ${reviewPage>=reviews.length-1?'disabled':''}>Next side</button></div>`;
+   paginateText($('review-copy'),review?.reason||'No independent review available.');
+   $('review-prev').onclick=()=>{reviewPage--;tab('review');};$('review-next').onclick=()=>{reviewPage++;tab('review');};
+  }
+  if(which==='cosmos'){
+   content.innerHTML=`<span class="eyebrow">Indexed captions + spatial evidence</span><button id="cosmos-analysis" class="primary">Generate Cosmos analysis</button><div id="cosmos-result" role="status"></div>`;
+   $('cosmos-analysis').onclick=async()=>{const b=$('cosmos-analysis');b.disabled=true;$('cosmos-result').textContent='Reading indexed footage and imported reviews…';try{const d=await read(analysisPath,{method:'POST'});paginateText($('cosmos-result'),d.answer);}catch{$('cosmos-result').textContent='Analysis unavailable. Saved evidence remains available.';}finally{b.disabled=false;}};
+  }
+  if(which==='source'){
+   const r=f.segment_refs[sourcePage];
+   content.innerHTML=`<span class="eyebrow">Canonical archive evidence</span><dl class="source-list"><dt>Video</dt><dd>${escape(D.source_filename)}</dd><dt>Camera / location</dt><dd>${escape(r?.camera_id)} / ${escape(r?.location)}</dd><dt>Segment</dt><dd>${escape(r?.segment_id)}</dd><dt>Parent interval</dt><dd>${r?.start_sec.toFixed(2)}–${r?.end_sec.toFixed(2)} s</dd><dt>Map</dt><dd>${escape(D.scene_id)}</dd><dt>Source linkage</dt><dd>${D.source_verification?.method==='authenticated_transfer_sha256'?'Authenticated transfer, SHA-256 verified':'Verified matching archive frame'}</dd></dl><div class="pager"><button id="source-prev" ${sourcePage===0?'disabled':''}>Previous clip</button><span>${sourcePage+1} / ${f.segment_refs.length}</span><button id="source-next" ${sourcePage>=f.segment_refs.length-1?'disabled':''}>Next clip</button></div>`;
+   $('source-prev').onclick=()=>{sourcePage--;tab('source');};$('source-next').onclick=()=>{sourcePage++;tab('source');};
+  }
+  content.querySelector('#show-frames')?.addEventListener('click',()=>tab('frames'));
+ }
+ document.querySelectorAll('[data-tab]').forEach(b=>{b.onclick=()=>tab(b.dataset.tab);b.onkeydown=e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const tabs=[...document.querySelectorAll('[data-tab]')],i=tabs.indexOf(b),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];tab(next.dataset.tab);next.focus();}};});tab('action');
+}
+if(findingId&&!finding)throw new Error('This recommendation is unavailable. Return to the street story.');
 function seekWhenReady(t){if(vid.readyState>=1)seek(t);else vid.addEventListener('loadedmetadata',()=>seek(t),{once:true});}
-if(finding){renderReport(finding);$('headline').textContent=finding.title;seekWhenReady(finding.scene_time_sec);}
+if(finding){renderReport(finding);seekWhenReady(finding.scene_time_sec);}
 const initial=Number(new URLSearchParams(location.search).get('t'));if(Number.isFinite(initial)&&initial>0)seekWhenReady(initial);
 window.UnfoldDemo={seek,start,sceneId:D.scene_id,findings};
-$('source-label').textContent=D.source_filename;
+
 } // run
 run().catch(error=>{const b=document.getElementById('error-banner');b.hidden=false;b.textContent=error.message||'Demo unavailable. Refresh to retry.';document.getElementById('headline').textContent='Saved ride unavailable';});
