@@ -339,6 +339,6 @@ lists every variable with a description.
 
 ## StreetTwin app
 
-StreetTwin turns existing street footage into sampled analytics, structured planning reviews, and playable evidence with YOLO context. The default view uses first-person NYC cycling footage.
+StreetTwin shows existing street footage with YOLO object highlighting, an explicit pending 3D viewport, and policy recommendations that open their own pages with cited clips and scoped statistics. The default view uses first-person NYC cycling footage.
 
 Deploy with `bash tools/street-twin/deploy.sh`, then open [the workshop](https://workshop.thecosmoslabs.com) → **App**. See [the StreetTwin run guide and three-query demo](tools/street-twin/README.md) for setup, evidence semantics, corpus notes, and the future Spatial interface.
