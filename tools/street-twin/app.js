@@ -33,6 +33,7 @@ function populateSelect(id, values, defaultText, chosen='') {
 }
 function renderAnalytics(data) {
   state.clips=data.clips;state.recommendations=data.recommendations;
+  renderEvidenceList();
   $('sample-label').textContent=`${data.sample_count} SAMPLED / ${data.available_clips ?? '—'} AVAILABLE CLIPS`;
   $('metrics').innerHTML=[[data.sample_count,'Sampled clips'],[data.recommendations.length,'Planning reviews'],[data.camera_count,'Cameras sampled']].map(([n,label])=>`<div><strong>${n}</strong><span>${label}</span></div>`).join('');
   const max=Math.max(...data.object_chart.map(x=>x.clip_count),1);
@@ -43,6 +44,8 @@ function renderAnalytics(data) {
   const hero=data.clips.find(c=>c.filename.includes('GOPR0130_chunk_0004_segment_005')) || data.clips[0];
   if(hero) {
     state.hero=hero;
+    $('hero-video').src=streamURL(hero.id);
+    if(!matchMedia('(prefers-reduced-motion: reduce)').matches) $('hero-video').play().catch(()=>{});
     $('hero-title').textContent=hero.observation_tags.includes('Cyclist passage')?'Delivery vehicles narrow cyclist passage.':'A recorded view of the street.';
     $('hero-camera').textContent=hero.camera_id;
     $('hero-location').textContent=locationName(hero.location);
@@ -61,12 +64,14 @@ async function loadAnalytics() {
   try {
     const data=await api('analytics?'+filterParams());
     if(generation!==state.generation)return;
-    renderAnalytics(data);
+    clearPlayer();renderAnalytics(data);
+    if(data.clips.length)selectClip(data.clips[0].id);
     status(`${data.sample_count} sampled clips across ${data.camera_count} cameras. Dates refer to indexing; observations refer to recorded footage.`);
   } catch(error) { if(generation===state.generation)status(error.message,true); }
   finally {if(generation===state.generation)document.querySelector('.apply').disabled=false;}
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => showTab(button.dataset.tab)));
+$('hero-open').addEventListener('click',()=>{if(state.hero) {showTab('evidence');selectClip(state.hero.id);}});
 $('filters').addEventListener('submit', event => {event.preventDefault();loadAnalytics();});
 async function start() {
   try {
@@ -76,4 +81,108 @@ async function start() {
     await loadAnalytics();
   } catch(error) {status(error.message,true);}
 }
+
+
+function clipTitle(clip) {
+  const first=clip.caption.split(/(?<=[.!?])\s/)[0] || 'Recorded street segment';
+  return first.length>145?first.slice(0,142)+'…':first;
+}
+function tagsHTML(clip) {
+  return (clip.observation_tags||[]).map(t=>`<span>${escapeHTML(t)}</span>`).join('');
+}
+function renderEvidenceList(clips=state.clips) {
+  $('evidence-count').textContent=`${clips.length} RECORDED SEGMENTS`;
+  $('clip-list').innerHTML=clips.length?clips.map(c=>`<button class="evidence-card ${state.selected===c.id?'selected':''}" data-clip="${c.id}"><div class="meta"><span>${escapeHTML(locationName(c.location))}</span><span>${time(c.start_sec)}–${time(c.end_sec)}</span></div><h4>${escapeHTML(clipTitle(c))}</h4><div class="meta"><span>${escapeHTML(c.camera_id)}</span><span>SEG ${c.segment_number}</span></div><div class="tags">${tagsHTML(c)}</div></button>`).join(''):'<p class="muted">No matching clips. Adjust the filters or description.</p>';
+  $('clip-list').querySelectorAll('[data-clip]').forEach(b=>b.addEventListener('click',()=>selectClip(b.dataset.clip)));
+}
+let selectionGeneration=0;
+async function selectClip(id) {
+  const generation=++selectionGeneration;
+  state.selected=id;state.detection=null;
+  $('reasoning').textContent='';$('reason-button').disabled=false;
+  renderEvidenceList();
+  const known=state.clips.find(c=>c.id===id);
+  if(known)renderPlayer(known);
+  $('evidence-video').src=streamURL(id);
+  $('detection-summary').textContent='Loading detection context…';
+  try {
+    const clip=await api('evidence/'+id);
+    if(generation!==selectionGeneration)return;
+    const merged={...known,...clip,observation_tags:known?.observation_tags||[]};
+    renderPlayer(merged);
+    const detections=await api('detections/'+id);
+    if(generation!==selectionGeneration)return;
+    state.detection=detections;
+    $('detection-summary').textContent=detections.available?
+      `YOLO context · ${detections.frame_count} frames · Peak detections per clip: `+Object.entries(clip.object_counts).filter(([k])=>['car','person','bicycle','truck','bus','motorcycle'].includes(k)).map(([k,n])=>`${k} ${n}`).join(' / '):'No YOLO frame detections available for this segment.';
+    drawDetections();
+  } catch(error) {if(generation===selectionGeneration)$('detection-summary').textContent=error.message;}
+}
+function renderPlayer(clip) {
+  state.selectedClip=clip;
+  $('player-title').textContent=clipTitle(clip);
+  $('player-timing').textContent=`Parent ${time(clip.start_sec)}–${time(clip.end_sec)} · ${clip.duration}s clip`;
+  $('player-tags').innerHTML=tagsHTML(clip);
+  $('player-details').innerHTML=[['CAMERA',clip.camera_id],['LOCATION',locationName(clip.location)],['INDEXED AT',(clip.indexed_at||'Unknown').replace('T',' ').slice(0,19)],['SEGMENT',clip.segment_number]].map(([k,v])=>`<div><span>${k}</span>${escapeHTML(v)}</div>`).join('')+`<div class="segment-id"><span>SEGMENT ID / SOURCE</span>${escapeHTML(clip.source)}</div>`;
+  $('player-caption').textContent=clip.caption;
+}
+function drawDetections() {
+  const canvas=$('overlay'),video=$('evidence-video');
+  canvas.width=video.clientWidth;canvas.height=video.clientHeight;
+  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(!$('show-detections').checked||!state.detection?.available||!video.videoWidth)return;
+  const frames=state.detection.frames;
+  const frame=frames.reduce((best,f)=>Math.abs(f.time_sec-video.currentTime)<Math.abs((best?.time_sec??Infinity)-video.currentTime)?f:best,null);
+  if(!frame||Math.abs(frame.time_sec-video.currentTime)>.12)return;
+  const [h,w]=frame.shape||state.detection.video_shape;
+  const scale=Math.min(canvas.width/video.videoWidth,canvas.height/video.videoHeight);
+  const displayW=video.videoWidth*scale,displayH=video.videoHeight*scale;
+  const offsetX=(canvas.width-displayW)/2,offsetY=(canvas.height-displayH)/2;
+  const sx=displayW/w,sy=displayH/h;
+  ctx.font='11px monospace';ctx.lineWidth=1.4;
+  for(const d of frame.detections) {
+    if(d.confidence<.5||!['car','person','bicycle','truck','bus','motorcycle'].includes(d.label))continue;
+    const [x1,y1,x2,y2]=d.bbox;
+    const x=offsetX+x1*sx,y=offsetY+y1*sy;
+    ctx.strokeStyle=d.label==='bicycle'?'#d7ee75':'#7cc7b6';
+    ctx.strokeRect(x,y,(x2-x1)*sx,(y2-y1)*sy);
+    const text=`${d.label} ${Math.round(d.confidence*100)}%`;
+    const ty=Math.max(y-17,0);
+    ctx.fillStyle='#101b18dd';ctx.fillRect(x,ty,ctx.measureText(text).width+8,17);
+    ctx.fillStyle=ctx.strokeStyle;ctx.fillText(text,x+4,ty+12);
+  }
+}
+function frameLoop() { if(!$('evidence-panel').hidden)drawDetections();requestAnimationFrame(frameLoop); }
+requestAnimationFrame(frameLoop);
+$('show-detections').addEventListener('change',drawDetections);
+$('evidence-video').addEventListener('error',()=>{if(state.selected)$('detection-summary').textContent='Playback unavailable. The indexed caption and segment reference remain visible.';});
+$('reason-button').addEventListener('click',async()=>{
+  if(!state.selected)return;
+  const id=state.selected;
+  $('reason-button').disabled=true;$('reasoning').textContent='Reading this parent video’s indexed captions…';
+  try {const x=await api('reason/'+id,{method:'POST'});if(state.selected===id)$('reasoning').textContent='Parent video description · '+x.answer;}
+  catch(error){if(state.selected===id)$('reasoning').textContent=error.message;}
+  finally{if(state.selected===id)$('reason-button').disabled=false;}
+});
+$('search-form').addEventListener('submit',async event=>{
+  event.preventDefault();const query=$('query').value.trim();
+  if(!query)return;
+  const generation=++state.generation;
+  status('Searching indexed street descriptions…');
+  try {
+    const p=filterParams();p.set('query',query);
+    const data=await api('search?'+p);
+    if(generation!==state.generation)return;
+    renderAnalytics(data);showTab('evidence');
+    status(`${data.sample_count} retrieved clips. Search results may include routine activity; planning reviews require caption evidence.`);
+    if(data.clips.length)selectClip(data.clips[0].id);else clearPlayer();
+  }catch(error){if(generation===state.generation)status(error.message,true);}
+});
+function clearPlayer() {
+  ++selectionGeneration;state.selected=null;state.detection=null;state.selectedClip=null;
+  $('evidence-video').removeAttribute('src');$('evidence-video').load();
+  $('player-title').textContent='No segment selected';$('player-timing').textContent='';
+  ['player-tags','player-details','player-caption','detection-summary','reasoning'].forEach(id=>$(id).textContent='');
+}
+$('reset-search').addEventListener('click',()=>{$('query').value='';clearPlayer();loadAnalytics();});
 start();

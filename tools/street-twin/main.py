@@ -1,9 +1,10 @@
 """StreetTwin: a thin, same-origin interface to the indexed VSS archive."""
 import os
+import re
 from pathlib import Path
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context
 from vss import VSS, UpstreamError
-from service import filters_from, sample, BadFilter
+from service import filters_from, sample, BadFilter, analytics, matches
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
@@ -26,6 +27,58 @@ def bad_filter(error):
 def get_analytics():
     filters = filters_from(request.args, vss.metadata())
     return jsonify(sample(vss, filters))
+
+def segment_id(value):
+    if not re.fullmatch(r'[a-f0-9]{20}', value):
+        raise UpstreamError(404)
+    return value
+
+@app.get('/api/evidence/<clip_id>')
+def evidence(clip_id):
+    return jsonify(vss.inspect(segment_id(clip_id)))
+
+@app.get('/api/detections/<clip_id>')
+def detections(clip_id):
+    return jsonify(vss.detections(segment_id(clip_id)))
+
+@app.get('/api/stream/<clip_id>')
+def stream(clip_id):
+    row = vss.get_segment(segment_id(clip_id))
+    range_header = request.headers.get('Range')
+    if range_header and not re.fullmatch(r'bytes=(?:[0-9]+-[0-9]*|-[0-9]+)', range_header):
+        return jsonify(error='Unsupported video range'), 416
+    upstream = vss.request('videos/stream', params={'source':row['source']},
+                           stream=True, range_header=range_header)
+    def chunks():
+        try:
+            yield from upstream.iter_content(chunk_size=65536)
+        finally:
+            upstream.close()
+    headers = {k:upstream.headers[k] for k in ['Content-Length','Content-Range','Accept-Ranges','ETag','Last-Modified'] if k in upstream.headers}
+    headers['Content-Type']='video/mp4'
+    headers['Cache-Control']='private, max-age=60'
+    response = Response(stream_with_context(chunks()), status=upstream.status_code, headers=headers)
+    response.call_on_close(upstream.close)
+    return response
+
+@app.get('/api/search')
+def search():
+    filters = filters_from(request.args, vss.metadata())
+    query = request.args.get('query','').strip()
+    if not 3 <= len(query) <= 500:
+        raise BadFilter('Describe the scene in 3–500 characters.')
+    clips = vss.search(query,filters)
+    clips = [c for c in clips if c and matches(c,filters)]
+    return jsonify(analytics(clips,filters=filters))
+
+@app.post('/api/reason/<clip_id>')
+def reason(clip_id):
+    row=vss.get_segment(segment_id(clip_id))
+    data=vss.request('agent/ask', data={
+        'original_video':row['original_video'], 'top_k':6,
+        'question':'Describe visible curb use, cyclist passage and crossing activity in this parent video. Cite segment numbers and times. Distinguish observations from uncertainty. Do not infer legal violations, engine idling, speeds or distances.'})
+    return jsonify(answer=data.get('answer','No description available.'),
+                   scope='parent_video', segment_id=clip_id)
 
 @app.get("/api/stats")
 def stats():
