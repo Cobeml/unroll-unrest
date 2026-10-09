@@ -25,3 +25,16 @@ The archive query **“parked red sedan obstructs the riding path, rider maneuve
 ## Re-ingestion and reconstruction notes
 
 No new video uploads or planner-caption re-ingestion were used for this update. Existing indexed captions and detections remain intact. LingBot/OWL/Qwen processing is invoked only on selected existing parent bytes in the external service. The demo map was imported from completed run `20261009-125354-biker`; source alignment was previously visually checked at 16.2162 s.
+
+## Verified selected-video acceptance run
+
+A second existing parent was processed end to end through the external service on 2026-10-09:
+
+- Parent: `20261008_072948_GOPR0130_chunk_0014.mp4`; selected segment `ef7c083c57cb1601f04f` at 5–10 s.
+- Durable job: `ba9c06b77f5fb8517391c4c4`; imported scene: `20261009-155730-archive-ba9c06b77f5f`.
+- Exact 47,340,405-byte source transfer verified against the remote SHA-256.
+- All remote stages completed. Output: 116 objects, two assessed crossings, three cited sightline-inspection proposals, and saved Cosmos analysis.
+- The 0.2098 s terminal map tail lies beyond the captioned interval and is explicitly excluded from citations.
+- Browser checks verified the resulting story, recommendation tabs, source provenance, cached analysis, deep-link reload, job reuse and mobile layouts without scrolling.
+
+From **Find risk clips → Recent runs**, open this completed job to avoid waiting for reconstruction during the presentation. It demonstrates processing of a different archive parent; it does not establish a verified crash.

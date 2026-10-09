@@ -45,6 +45,9 @@ No video is uploaded into VSS. The CPU web app uses existing VSS search, YOLO an
 # On the configured VM, against the deployed app:
 bash tools/street-twin/with-runtime.sh bash -c \
   'UNFOLD_TEST_BASE="$STREETTWIN_API_BASE" timeout 150 xvfb-run -a .venv/bin/python tools/street-twin/tests/ride_browser_smoke.py'
+# Verify the completed selected-parent pipeline and resulting stakeholder pages:
+bash tools/street-twin/with-runtime.sh bash -c \
+  'UNFOLD_TEST_BASE="$STREETTWIN_API_BASE" timeout 150 xvfb-run -a .venv/bin/python tools/street-twin/tests/processing_browser_smoke.py'
 ```
 
 Browser checks use system Chrome and Xvfb. All pages use serif type, an off-white shell, and a fixed viewport. Long results and analysis use pagination.

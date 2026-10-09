@@ -497,11 +497,13 @@ $('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overla
 const findings=D.findings||[];
 let insightPage=0;
 function renderInsights(){
- const visible=findings.slice(insightPage*2,insightPage*2+2);
+ const size=innerHeight<720?1:2;insightPage=Math.min(insightPage,Math.max(0,Math.ceil(findings.length/size)-1));
+ const visible=findings.slice(insightPage*size,insightPage*size+size);
  $('recommendations').innerHTML=visible.length?visible.map(f=>`<a class="recommendation" href="${href(ridePath+'/recommendations/'+f.id)}"><span>${escape(f.title)}</span><span aria-hidden="true">↗</span></a>`).join(''):'<p class="empty-insight">No supported maintenance action found.</p>';
- if(findings.length>2){$('recommendations').insertAdjacentHTML('beforeend',`<div class="pager insights-pager"><button id="insight-prev" ${insightPage===0?'disabled':''}>Previous</button><span>${insightPage+1} / ${Math.ceil(findings.length/2)}</span><button id="insight-next" ${(insightPage+1)*2>=findings.length?'disabled':''}>Next</button></div>`);$('insight-prev').onclick=()=>{insightPage--;renderInsights();};$('insight-next').onclick=()=>{insightPage++;renderInsights();};}
+ if(findings.length>size){$('recommendations').insertAdjacentHTML('beforeend',`<div class="pager insights-pager"><button id="insight-prev" ${insightPage===0?'disabled':''}>Previous</button><span>${insightPage+1} / ${Math.ceil(findings.length/size)}</span><button id="insight-next" ${(insightPage+1)*size>=findings.length?'disabled':''}>Next</button></div>`);$('insight-prev').onclick=()=>{insightPage--;renderInsights();};$('insight-next').onclick=()=>{insightPage++;renderInsights();};}
 }
 renderInsights();
+addEventListener('resize',renderInsights);
 const findingId=location.pathname.match(/\/(?:finding|recommendations)\/(crossing-[0-9]+-(?:left|right))/)?.[1];
 const finding=findings.find(f=>f.id===findingId);
 function paginateText(container,text){
