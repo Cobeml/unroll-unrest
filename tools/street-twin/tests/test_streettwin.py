@@ -115,7 +115,8 @@ class PolicyRouteTests(unittest.TestCase):
         review_id=data['recommendations'][0]['id']
         with patch('main.vss.metadata',return_value={}),patch('main.sample',return_value=data):
             with app.test_client() as client:
-                self.assertEqual(client.get('/policy/'+review_id).status_code,200)
+                with client.get('/policy/'+review_id) as page:
+                    self.assertEqual(page.status_code,200)
                 report=client.get('/api/policy/'+review_id)
                 self.assertEqual(report.status_code,200)
                 self.assertEqual(report.json['statistics']['evidence_clips'],1)
