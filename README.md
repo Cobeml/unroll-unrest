@@ -6,7 +6,7 @@ The demo reconstructs **20261008_074640_GX050001_chunk_0000.mp4**. At crossing 2
 
 **Open the deployed app:** [Workshop](https://workshop.thecosmoslabs.com) → **App**.
 
-The home page is a fullscreen 3D story. Click the recommendation in the top-left corner for Action, Statistics, Frames, Video, Review, Cosmos and Source tabs. **Find risk clips** searches the existing VAST archive for collision, close-call or crash candidates. Choose a segment, preview its video and YOLO detections, then reconstruct its full parent chunk on the teammate service. The result opens in the same viewer. A search match does not establish a collision.
+The home page is a fullscreen 3D story with a synchronized source-video inset. **Video** shows or hides the inset; play, pause and seek share one source clock. Click the recommendation in the top-left corner for Action, Statistics, Frames, Video, Review, Cosmos and Source tabs. **Find risk clips** searches the existing VAST archive for collision, close-call or crash candidates. Choose a segment, preview its video and YOLO detections, then reconstruct its full parent chunk on the teammate service. The result opens in the same viewer. A search match does not establish a collision.
 
 ## Get the code
 

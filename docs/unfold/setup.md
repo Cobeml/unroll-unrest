@@ -10,7 +10,7 @@
 | Teammate reconstruction service | Teammate Mac/GPU machine through HTTPS tunnel | Frames, LingBot geometry, OWLv2 objects, export, Qwen frame review |
 | App storage | Existing team database bucket, `street-twin/spatial/` | Immutable maps, indices, jobs and saved analysis; no database table writes |
 
-The VM does **not** run LingBot or install model weights. The app keeps working with its imported demo when the external machine or tunnel is unavailable.
+The VM does **not** run LingBot or install model weights. The app keeps working with its imported scenes when the external machine or tunnel is unavailable. Source video streams from the existing VSS archive through the app, independently of Cloudflare. The story displays video and 3D together with one play/pause/seek clock; its **Video** button hides or shows the inset. Cloudflare is used only for remote reconstruction and artifact transfer.
 
 ## 1. VM dependencies
 

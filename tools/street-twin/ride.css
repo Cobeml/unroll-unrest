@@ -9,3 +9,9 @@
 @media(max-height:650px){.head h1,.playing .head h1{font-size:24px}.head .sub{margin:8px 0}.head .eyebrow{margin-bottom:8px}.card{bottom:110px}.aps{gap:7px;margin-top:8px}.report-head h1{font-size:25px}.report-head>a{margin-bottom:6px}.policy-report{padding-top:12px;gap:8px}.report-content{gap:8px}.report-content h2{font-size:22px}.large-copy{font-size:15px}.analysis-copy{font-size:13px;line-height:1.5}.small-note{font-size:11px}.source-list{gap:6px}.workspace{padding:12px 18px;gap:9px}.workspace h1{font-size:25px}.candidate .snippet{display:none}.run-layout{gap:12px}.run-layout h2{font-size:23px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
 .insights-pager{font-size:11px;gap:9px}.insights-pager button{border-color:#607167;font-size:11px;padding:5px 8px;color:var(--paint)}
+/* One source-video clock drives both the inset and the reconstructed street. */
+.story-video{position:absolute;top:22px;right:28px;width:clamp(260px,27vw,420px);height:auto;z-index:2;border:1px solid #53605a;box-shadow:0 12px 35px #0005}
+.story-video .frame{flex:none;aspect-ratio:16/9}.story-video figcaption{padding:7px 10px}.story-video figcaption button{font-size:11px}
+.video-collapsed .story-video{display:none}.cockpit>.speed{left:50%;right:auto;transform:translateX(-50%)}
+@media(max-width:700px){.story-video{top:auto;right:18px;bottom:300px;width:min(260px,55vw)}.story-video figcaption{font-size:10px;padding:5px 8px}.story-video figcaption button{font-size:10px;padding:4px 6px}.views button{padding:7px 6px}.cockpit>.speed{display:none}}
+@media(max-width:700px) and (max-height:719px){.story-video{bottom:116px;width:min(250px,65vw)}body:not(.video-collapsed):not(.detail) .card{display:none}}

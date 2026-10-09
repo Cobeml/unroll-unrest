@@ -16,13 +16,18 @@ with sync_playwright() as p:
  assert page.locator('#error-banner').is_hidden()
  assert len(page.locator('.recommendation').all())==1
  assert 'Trim the hedge' in page.locator('.recommendation').inner_text()
- assert page.locator('#evidence-video').is_hidden()
+ assert page.locator('#evidence-video').is_visible()
+ assert page.locator('#vid').is_visible()
+ assert page.locator('#vid').get_attribute('src').startswith(base)
  assert page.locator('#stage canvas').is_visible()
  assert page.evaluate('getComputedStyle(document.body).fontFamily').startswith('Georgia')
  assert page.evaluate('getComputedStyle(document.body).backgroundColor')=='rgb(244, 242, 235)'
  fits(page);page.screenshot(path='/tmp/unfold-fullscreen-story.png')
  page.locator('#go').click()
  page.wait_for_function('document.getElementById("vid").currentTime>1',timeout=30000)
+ page.locator('#video-toggle').click();assert page.locator('#vid').is_hidden()
+ page.wait_for_function('document.getElementById("vid").currentTime>1.5',timeout=30000)
+ page.locator('#video-toggle').click();assert page.locator('#vid').is_visible()
  page.evaluate('document.getElementById("vid").pause();window.UnfoldDemo.seek(16.25)')
  page.wait_for_function('document.getElementById("vid").currentTime>16',timeout=30000)
  page.wait_for_timeout(300);assert '97%' in page.locator('#card').inner_text()
@@ -30,7 +35,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Explore',exact=True).click()
  assert page.get_by_role('button',name='Explore',exact=True).get_attribute('aria-pressed')=='true'
  for viewport in [{'width':390,'height':844},{'width':390,'height':600}]:
-  page.set_viewport_size(viewport);fits(page)
+  page.set_viewport_size(viewport);fits(page);assert page.locator('#vid').is_visible()
  page.set_viewport_size({'width':1440,'height':900})
  page.locator('.recommendation').click();page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
  assert page.locator('#policy-report h1').inner_text()=='Trim the hedge at crossing 2'

@@ -16,7 +16,8 @@ const base = '';
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const vid=$('vid'),ov=$('ov'),mini=$('mini'),scrub=$('scrub');
-vid.src=href(D.video);vid.poster=href('assets/ride-preview.jpg');
+vid.src=href(D.video);
+if(D.scene_id==='20261009-125354-biker')vid.poster=href('assets/ride-preview.jpg');
 vid.addEventListener('error',()=>{ $('error-banner').hidden=false;$('error-banner').textContent='Archive video unavailable. The saved map and evidence remain available; refresh to retry.'; });
 const ortho = new Image();ortho.src=href(D.ortho);
 await new Promise((resolve,reject)=>{ortho.onload=resolve;ortho.onerror=()=>reject(new Error('Saved map image unavailable. Refresh to retry.'));});
@@ -467,8 +468,12 @@ document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
 });
 $('cloud').onclick = () => { cloudPts.visible = !cloudPts.visible; $('cloud').setAttribute('aria-pressed', cloudPts.visible); };
 $('seen').onclick = () => { if (viewMesh) { viewMesh.visible = !viewMesh.visible; $('seen').setAttribute('aria-pressed', viewMesh.visible); } };
+$('video-toggle').onclick = () => {
+  const hidden=document.body.classList.toggle('video-collapsed');
+  $('video-toggle').setAttribute('aria-pressed',!hidden);
+};
 addEventListener('keydown', e => {
-  if (e.target.closest('button, input, select, textarea, a, .xi')) return;
+  if (e.target.closest('button, input, select, textarea, a, video, .xi')) return;
   const t = vid.currentTime || 0;
   if (e.key === ' ') { e.preventDefault(); $('play').click(); }
   else if (e.key === 'ArrowRight') { const c = cws.find(c => c.tw0 - .3 > t + .05); if (c) { seek(c.tw0 - .3); begin(); } }
@@ -481,6 +486,7 @@ function frame(now) {
   const slow = view === 'director' && started && !vid.paused && !!inspecting(t) && !still;
   const rate = slow ? .4 : 1; if (vid.playbackRate !== rate) vid.playbackRate = rate;
   $('speed').classList.toggle('on', slow);
+  $('video-label').textContent=slow?'Video · 0.4×':'Video · synced';
   $('clock').textContent = `${t.toFixed(1)} s of ${S.duration.toFixed(1)} s`;
   update3d(t, now); updateCard(t); drawMini(t); drawScrub(t); drawOverlay(t);
   last = now;
@@ -497,7 +503,7 @@ $('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overla
 const findings=D.findings||[];
 let insightPage=0;
 function renderInsights(){
- const size=innerHeight<720?1:2;insightPage=Math.min(insightPage,Math.max(0,Math.ceil(findings.length/size)-1));
+ const size=innerWidth<=700||innerHeight<720?1:2;insightPage=Math.min(insightPage,Math.max(0,Math.ceil(findings.length/size)-1));
  const visible=findings.slice(insightPage*size,insightPage*size+size);
  $('recommendations').innerHTML=visible.length?visible.map(f=>`<a class="recommendation" href="${href(ridePath+'/recommendations/'+f.id)}"><span>${escape(f.title)}</span><span aria-hidden="true">↗</span></a>`).join(''):'<p class="empty-insight">No supported maintenance action found.</p>';
  if(findings.length>size){$('recommendations').insertAdjacentHTML('beforeend',`<div class="pager insights-pager"><button id="insight-prev" ${insightPage===0?'disabled':''}>Previous</button><span>${insightPage+1} / ${Math.ceil(findings.length/size)}</span><button id="insight-next" ${(insightPage+1)*size>=findings.length?'disabled':''}>Next</button></div>`);$('insight-prev').onclick=()=>{insightPage--;renderInsights();};$('insight-next').onclick=()=>{insightPage++;renderInsights();};}
@@ -511,6 +517,7 @@ function paginateText(container,text){
  let page=0;const render=()=>{container.innerHTML=`<p class="analysis-copy">${escape(pages[page]||'No analysis available.')}</p><div class="pager"><button id="analysis-prev" ${page===0?'disabled':''}>Previous</button><span>${page+1} / ${Math.max(1,pages.length)}</span><button id="analysis-next" ${page>=pages.length-1?'disabled':''}>Next</button></div>`;container.querySelector('#analysis-prev').onclick=()=>{page--;render();};container.querySelector('#analysis-next').onclick=()=>{page++;render();};};render();
 }
 function renderReport(f){
+ $('evidence-video').classList.remove('story-video');
  document.body.classList.add('detail');$('policy-report').hidden=false;
  $('policy-report').innerHTML=`<header class="report-head"><a href="${href(ridePath)}?t=${f.scene_time_sec}">← Street story</a><span class="eyebrow">Crossing ${f.crossing} · ${escape(f.side)}</span><h1>${escape(f.title)}</h1></header><div class="report-tabs" role="tablist" aria-label="Recommendation evidence">${['Action','Statistics','Frames','Video','Review','Cosmos','Source'].map((label,i)=>`<button role="tab" id="tab-${label.toLowerCase()}" aria-controls="report-content" aria-selected="${i===0}" data-tab="${label.toLowerCase()}">${label}</button>`).join('')}</div><div class="report-content" id="report-content" role="tabpanel" aria-labelledby="tab-action"></div>`;
  const content=$('report-content');let sourcePage=0,reviewPage=0;
@@ -550,6 +557,11 @@ function renderReport(f){
 if(findingId&&!finding)throw new Error('This recommendation is unavailable. Return to the street story.');
 function seekWhenReady(t){if(vid.readyState>=1)seek(t);else vid.addEventListener('loadedmetadata',()=>seek(t),{once:true});}
 if(finding){renderReport(finding);seekWhenReady(finding.scene_time_sec);}
+else{
+ const figure=$('evidence-video');
+ document.querySelector('.cockpit').appendChild(figure);
+ figure.classList.add('story-video');figure.hidden=false;vid.controls=true;
+}
 const initial=Number(new URLSearchParams(location.search).get('t'));if(Number.isFinite(initial)&&initial>0)seekWhenReady(initial);
 window.UnfoldDemo={seek,start,sceneId:D.scene_id,findings};
 

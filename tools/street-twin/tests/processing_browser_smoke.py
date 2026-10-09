@@ -21,12 +21,21 @@ with sync_playwright() as p:
  assert again['id']==job_id and again['status']=='complete'
  page.get_by_role('link',name='Explore this street').click();page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
  assert page.evaluate('window.UnfoldDemo.sceneId')==job['scene_id']
+ assert page.locator('#vid').is_visible()
+ assert page.locator('#vid').get_attribute('src')==base+'api/rides/'+job['scene_id']+'/video'
+ page.wait_for_function('document.getElementById("vid").readyState>=2',timeout=30000)
+ page.locator('#go').click()
+ page.wait_for_function('document.getElementById("vid").currentTime>5.5',timeout=30000)
+ page.locator('#play').click()
+ page.evaluate('window.UnfoldDemo.seek(10)')
+ page.wait_for_function('Math.abs(document.getElementById("vid").currentTime-10)<0.1',timeout=30000)
+ page.wait_for_function('document.getElementById("clock").textContent.startsWith("10.0")',timeout=30000)
  assert len(page.evaluate('window.UnfoldDemo.findings'))==3
  assert page.locator('.recommendation').count()==2
  page.locator('#insight-next').click();assert page.locator('.recommendation').count()==1
  page.locator('#insight-prev').click()
  page.screenshot(path='/tmp/unfold-new-archive-story.png');fits(page)
- page.set_viewport_size({'width':390,'height':600});fits(page)
+ page.set_viewport_size({'width':390,'height':600});fits(page);assert page.locator('#vid').is_visible()
  page.locator('.recommendation').first.click();page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
  for v in [{'width':1440,'height':900},{'width':390,'height':844},{'width':390,'height':600}]:
   page.set_viewport_size(v)
