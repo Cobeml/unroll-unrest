@@ -97,7 +97,7 @@ def build_recommendations(clips, events=(), detections=None, generated_at=None):
     return results
 
 
-def validate_recommendation(item, clips, detections=None):
+def validate_recommendation(item, clips, detections=None, spatial_contexts=None):
     """Recheck source claims and catalogue; reject altered identity, action or metrics."""
     try:
         event=item['bottleneck'];refs=item['segment_refs']
@@ -108,6 +108,8 @@ def validate_recommendation(item, clips, detections=None):
         regenerated=validate_findings(json.dumps({'findings':[selected]}),cohort)
         if event not in regenerated:return False
         expected=next(r for r in build_recommendations(cohort,[event],detections,generated_at=item.get('generated_at')) if r['type']==item['type'])
-        return item==expected
+        from spatial_reasoning import validate_spatial_refs
+        # Spatial annotations are admitted separately; they cannot change an action or video metric.
+        return {k:v for k,v in item.items() if k!='spatial_refs'}==expected and validate_spatial_refs(item,spatial_contexts or [])
     except (KeyError,IndexError,StopIteration,ValueError,TypeError):
         return False

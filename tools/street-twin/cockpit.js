@@ -4,9 +4,9 @@ import * as THREE from './vendor/three.module.min.js';
 import {OrbitControls} from './vendor/OrbitControls.js';
 const {api,url,state,selectClip,loadView,filterParams}=window.StreetTwin;
 const $=id=>document.getElementById(id),still=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let D=null,engine=null,selected=null,view='director',mapTime=0,playing=false,last=0,pendingSeek=null,loading=0,clipsLoading=false;
+let D=null,engine=null,selected=null,view='director',mapTime=0,playing=false,last=0,pendingSeek=null,loading=0,clipsLoading=false,detached=false;
 const color=o=>o.group==='vehicle'?({standing:'#e45a48',moving:'#c9cdcf',unknown:'#719bb2'}[o.motion]):o.group==='crosswalk'?'#f2f1ec':'#f0c75a';
-function boundClip(){return D?.bindings.find(b=>b.segment_id===state.selected?.id);}
+function boundClip(){return detached?null:D?.bindings.find(b=>b.segment_id===state.selected?.id);}
 function timeAtVideo(){const b=boundClip();return b?Math.min(b.scene_end_sec,Math.max(b.scene_start_sec,b.scene_start_sec+$('video').currentTime-b.clip_start_sec)):null;}
 function linkage(){
  const b=boundClip();$('scene-link-state').textContent=!D?'':b?'Video linked to this map':'Archive video separate from this map';
@@ -15,8 +15,8 @@ function linkage(){
 async function seek(t){
  mapTime=Math.max(0,Math.min(D.duration,t));
  const b=D.bindings.find(b=>mapTime>=b.scene_start_sec&&mapTime<b.scene_end_sec)||D.bindings.find(b=>mapTime===D.duration&&b.scene_end_sec===D.duration);
- if(!b){$('video').pause();linkage();return;}
- const local=b.clip_start_sec+mapTime-b.scene_start_sec;
+ if(!b){detached=true;$('video').pause();linkage();return;}
+ detached=false;const local=b.clip_start_sec+mapTime-b.scene_start_sec;
  if(state.selected?.id!==b.segment_id){
   playing=false;
   pendingSeek={id:b.segment_id,time:local,play:false};
@@ -25,7 +25,9 @@ async function seek(t){
  else pendingSeek={id:b.segment_id,time:local,play:false};
 }
 $('video').addEventListener('loadedmetadata',()=>{if(pendingSeek?.id===state.selected?.id){$('video').currentTime=pendingSeek.time;if(pendingSeek.play)$('video').play().catch(()=>{});pendingSeek=null;}});
-window.addEventListener('streettwin:clip',e=>{const b=D?.bindings.find(b=>b.segment_id===e.detail.id);if(b)mapTime=b.scene_start_sec;linkage();});
+window.addEventListener('streettwin:clip',e=>{detached=false;const b=D?.bindings.find(b=>b.segment_id===e.detail.id);if(b)mapTime=b.scene_start_sec;linkage();});
+$('video').addEventListener('play',()=>{if(boundClip())playing=true;});
+$('video').addEventListener('pause',()=>{if(boundClip()&&!$('video').ended)playing=false;});
 $('video').addEventListener('ended',async()=>{
  const b=boundClip();if(!b||!playing||clipsLoading)return;
  const next=D.bindings.find(n=>Math.abs(n.scene_start_sec-b.scene_end_sec)<.02);
@@ -145,7 +147,7 @@ function frame(now){
  requestAnimationFrame(frame);
 }
 async function loadScene(id){
- const token=++loading;playing=false;selected=null;dispose();D=null;describe();$('ortho-fallback').hidden=true;
+ const token=++loading;playing=false;detached=false;selected=null;dispose();D=null;describe();$('ortho-fallback').hidden=true;
  $('cloud-toggle').disabled=false;document.querySelectorAll('[data-view]').forEach(b=>b.disabled=false);
  if(!id){$('cockpit').classList.add('map-pending');$('map-empty').hidden=false;for(const k of ['scene-bar','scene-legend','mini'])$(k).hidden=true;linkage();return;}
  try{
@@ -156,6 +158,6 @@ async function loadScene(id){
  }catch{if(token!==loading)return;dispose();D=null;$('map-empty').hidden=false;$('map-empty').querySelector('h2').textContent='Saved map unavailable';$('scene-link-state').textContent='Re-import this scene to retry';for(const k of ['scene-bar','scene-legend','mini'])$(k).hidden=true;$('cockpit').classList.add('map-pending');}
 }
 $('scene-select').onchange=async()=>{await loadScene($('scene-select').value);loadView(filterParams());};
-try{const list=await api('spatial/scenes');for(const s of list.scenes){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;$('scene-select').appendChild(o);}const id=new URLSearchParams(location.search).get('scene_id')||'';if(list.scenes.some(s=>s.id===id)){$('scene-select').value=id;await loadScene(id);}else if(list.scenes.length===1){$('scene-select').value=list.scenes[0].id;await loadScene(list.scenes[0].id);}linkage();}
+try{const list=await api('spatial/scenes');for(const s of list.scenes){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;$('scene-select').appendChild(o);}const id=new URLSearchParams(location.search).get('scene_id')||'';if(list.scenes.some(s=>s.id===id)){$('scene-select').value=id;await loadScene(id);}else if(list.scenes.length===1){$('scene-select').value=list.scenes[0].id;await loadScene(list.scenes[0].id);}linkage();if($('scene-select').value&&state.context.get('scene_id')!==$('scene-select').value)loadView(filterParams());}
 catch{$('scene-link-state').textContent='Saved-map import ready';}
 requestAnimationFrame(frame);

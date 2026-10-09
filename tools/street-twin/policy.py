@@ -4,7 +4,7 @@ from recommendations import validate_recommendation, interval_seconds
 
 def policy_report(data, review_id):
     review=next((r for r in data['recommendations'] if r['id']==review_id),None)
-    if review is None or not validate_recommendation(review,data['clips'],data.get('detections')):return None
+    if review is None or not validate_recommendation(review,data['clips'],data.get('detections'),data.get('spatial_contexts')):return None
     parent=review['segment_refs'][0]['original_video']
     cohort=[c for c in data['clips'] if c['original_video']==parent]
     refs={r['segment_id']:r for r in review['segment_refs']}

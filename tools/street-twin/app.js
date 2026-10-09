@@ -188,6 +188,12 @@ async function loadPolicy(){
   const recommendation=report.recommendation;
   $('policy-action').textContent=recommendation.action;$('policy-observation').textContent=recommendation.observation;$('policy-analysis').textContent=report.analysis;
   $('implementation-notes').innerHTML=`<h3>Purpose</h3><p>${esc(recommendation.purpose)}</p><h3>Responsible function</h3><p>${esc(recommendation.owner)}</p><h3>Before implementation</h3><ul>${recommendation.prerequisites.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><h3>Follow-up</h3><p>${esc(recommendation.follow_up)}</p><h3>Evidence limits</h3><ul>${recommendation.uncertainties.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`;
+  const spatialRefs=recommendation.spatial_refs||[];
+  $('spatial-evidence').hidden=!spatialRefs.length;
+  if(spatialRefs.length)$('spatial-evidence').innerHTML='<h3>Spatial observations</h3><p>Imported footprints and positions are estimates. Check clearance on site.</p>'+spatialRefs.map(r=>{
+   const link=url('./');const params=new URLSearchParams(state.context);params.set('scene_id',r.scene_id);params.set('scene_time',r.scene_start_sec);link.search=params;
+   return `<a href="${esc(link.href)}">${esc(r.label)} · ${esc(r.motion)} · ${r.scene_start_sec.toFixed(1)}–${r.scene_end_sec.toFixed(1)}s → Explore map</a>`;
+  }).join('');
   $('sampling-note').textContent=report.sampling_note+' Dates refer to indexing; seconds are relative to each parent video.';
   $('citation-links').innerHTML=report.clips.map(c=>`<a href="#clip-${c.id}" data-cite="${c.id}" aria-label="Open clip citation ${c.citation_number}">[${c.citation_number}]</a>`).join('');
   const max=Math.max(...s.detected_classes.map(c=>c.clip_count),1);

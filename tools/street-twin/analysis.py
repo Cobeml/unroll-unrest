@@ -13,6 +13,8 @@ from bottlenecks import VERSION, SYSTEM_PROMPT, allowed_claims, validate_finding
 from recommendations import build_recommendations
 from service import filters_from, matches, sample, demo, DEMO_ANCHORS, BadFilter
 from vss import UpstreamError
+from spatial import SpatialError
+from spatial_reasoning import enrich
 
 QUERIES = [
     'Parked vehicle blocks a lane and a cyclist or camera vehicle maneuvers around it',
@@ -24,18 +26,19 @@ LOG=logging.getLogger(__name__)
 
 def context_from(args, metadata):
     if not isinstance(args,dict):raise BadFilter('Choose a valid street view.')
-    if any(not isinstance(args.get(k,''),str) for k in ['location','camera_id','start','end','query','demo']):
+    if any(not isinstance(args.get(k,''),str) for k in ['location','camera_id','start','end','query','demo','scene_id']):
         raise BadFilter('Choose a valid street view.')
-    context={k:args[k].strip() for k in ['location','camera_id','start','end','query','demo'] if args.get(k,'').strip()}
+    context={k:args[k].strip() for k in ['location','camera_id','start','end','query','demo','scene_id'] if args.get(k,'').strip()}
     filters_from(context,metadata)
     if context.get('demo') and context['demo'] not in DEMO_ANCHORS:raise BadFilter('Choose an existing demo preset.')
     if context.get('query') and not 3<=len(context['query'])<=500:raise BadFilter('Describe the scene in 3–500 characters.')
+    if context.get('scene_id') and not __import__('re').fullmatch(r'[A-Za-z0-9_-]{1,80}',context['scene_id']):raise BadFilter('Choose a valid saved map.')
     return context
 
 
 class AnalysisManager:
-    def __init__(self, vss, *, ttl=1800, clock=time.monotonic):
-        self.vss=vss;self.ttl=ttl;self.clock=clock
+    def __init__(self, vss, *, spatial=None, ttl=1800, clock=time.monotonic):
+        self.vss=vss;self.spatial=spatial;self.ttl=ttl;self.clock=clock
         self.lock=threading.RLock();self.jobs=OrderedDict();self.scopes={}
         self.pool=ThreadPoolExecutor(max_workers=2,thread_name_prefix='street-analysis')
 
@@ -45,7 +48,8 @@ class AnalysisManager:
                 self.jobs.pop(job_id);self.scopes.pop(job['key'],None)
 
     def start(self, context):
-        key=hashlib.sha256((VERSION+json.dumps(context,sort_keys=True)).encode()).hexdigest()
+        spatial_hash=self.spatial.version(context.get('scene_id')) if self.spatial else ''
+        key=hashlib.sha256((VERSION+spatial_hash+json.dumps(context,sort_keys=True)).encode()).hexdigest()
         with self.lock:
             self._prune()
             existing=self.jobs.get(self.scopes.get(key))
@@ -60,7 +64,7 @@ class AnalysisManager:
                 old=self.jobs.pop(oldest);self.scopes.pop(old['key'],None)
             job_id=secrets.token_hex(8)
             job={'id':job_id,'key':key,'scope':dict(context),'status':'queued','phase':'Queued',
-                 'warnings':[],'result':None,'expires':self.clock()+self.ttl}
+                 'warnings':[],'result':None,'spatial_hash':spatial_hash,'expires':self.clock()+self.ttl}
             self.jobs[job_id]=job;self.scopes[key]=job_id
             self.pool.submit(self._run,job_id)
             return self._public(job)
@@ -92,6 +96,8 @@ class AnalysisManager:
             self._update(job_id,status='running',phase='Finding obstructions')
             with self.lock:context=dict(self.jobs[job_id]['scope'])
             data=self.analyze(context,lambda phase:self._update(job_id,phase=phase))
+            if self.spatial and self.spatial.version(context.get('scene_id'))!=self.jobs[job_id]['spatial_hash']:
+                raise SpatialError('Map changed during analysis. Retry.')
             self._update(job_id,status='complete',phase='Analysis complete',result=data,
                          warnings=data['warnings'],expires=self.clock()+self.ttl)
         except Exception as error:
@@ -166,7 +172,10 @@ class AnalysisManager:
         if attempted and failed==attempted:raise UpstreamError(503)
         budget()
         generated=datetime.now(timezone.utc).isoformat()
-        return {'clips':clips,'bottlenecks':events,'recommendations':build_recommendations(clips,events,detections,generated),
+        recommendations=build_recommendations(clips,events,detections,generated)
+        recommendations,spatial_contexts,spatial_warnings=enrich(vss,self.spatial,context.get('scene_id'),recommendations,progress=progress,budget=budget) if self.spatial else (recommendations,[],[])
+        warnings.extend(spatial_warnings)
+        return {'clips':clips,'bottlenecks':events,'recommendations':recommendations,'spatial_contexts':spatial_contexts,
                 'detections':detections,'generated_at':generated,'filters':filters,'demo':initial.get('demo'),
                 'analyzed_parent_count':len(parent_seeds),'reasoned_parent_count':attempted,
                 'warnings':list(dict.fromkeys(warnings))}

@@ -254,7 +254,7 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
         normalized.sort(key=lambda b:b['scene_start_sec'])
         if len({b['segment_id'] for b in normalized})!=len(normalized) or any(b['scene_start_sec']<a['scene_end_sec'] for a,b in zip(normalized,normalized[1:])):raise SpatialError('Bindings overlap or repeat a segment.')
     scene={'schema_version':SCHEMA_VERSION,'id':sid,'name':str(run.get('name') or sid)[:120],
-           'source_revision':UPSTREAM,'duration':duration,'extent':extent,'path':path,'objects':objects,
+           'viewer_revision':UPSTREAM,'source_revision':str(run.get('code_version') or 'unknown')[:80],'duration':duration,'extent':extent,'path':path,'objects':objects,
            'cam_h':number(raw.get('cam_h',1.1)),'hfov':number(raw.get('hfov',90)),
            'quality':QUALITY,'bindings':normalized,'assets':assets}
     if not 0<scene['cam_h']<10 or not 1<scene['hfov']<180:raise SpatialError('Invalid camera assumptions.')

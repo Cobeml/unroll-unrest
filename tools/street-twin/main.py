@@ -16,7 +16,7 @@ app = Flask(__name__, static_folder=None)
 app.config['PUBLIC_PATH'] = os.environ.get('STREETTWIN_PUBLIC_PATH', '/')
 vss = VSS()
 scenes = SceneStore()
-analyses = AnalysisManager(vss)
+analyses = AnalysisManager(vss, spatial=scenes)
 app.config['MAX_CONTENT_LENGTH'] = 8192
 
 def app_shell():
@@ -137,6 +137,9 @@ def response_headers(response):
 def segment_id(value):
     if not re.fullmatch(r'[a-f0-9]{20}', value):
         raise UpstreamError(404)
+    try:vss.get_segment(value)
+    except UpstreamError:
+        vss.archive();vss.get_segment(value)
     return value
 
 @app.get('/api/evidence/<clip_id>')
