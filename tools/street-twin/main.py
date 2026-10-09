@@ -2,9 +2,24 @@
 import os
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
+from vss import VSS, UpstreamError
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
+vss = VSS()
+
+@app.errorhandler(UpstreamError)
+def upstream_error(error):
+    status = 404 if error.status == 404 else 503
+    return jsonify(error="Clip unavailable" if status == 404 else "Archive temporarily unavailable. Try again."), status
+
+@app.get("/api/metadata")
+def metadata():
+    return jsonify(vss.metadata())
+
+@app.get("/api/stats")
+def stats():
+    return jsonify(vss.stats())
 
 @app.get('/')
 def index():
