@@ -1,6 +1,7 @@
 """StreetTwin: a thin, same-origin interface to the indexed VSS archive."""
 import os
 import re
+import requests
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context
 from vss import VSS, UpstreamError
@@ -13,12 +14,21 @@ vss = VSS()
 
 @app.errorhandler(UpstreamError)
 def upstream_error(error):
-    status = 404 if error.status == 404 else 503
+    status = error.status if error.status in {404,416} else 503
     return jsonify(error="Clip unavailable" if status == 404 else "Archive temporarily unavailable. Try again."), status
 
 @app.get("/api/metadata")
 def metadata():
-    return jsonify(vss.metadata())
+    fields=vss.metadata()
+    streets=[c for c in vss.archive() if c.get('capture_type') in {'streets','traffic'}]
+    locations={}
+    for chunk in streets:
+        camera,location=chunk.get('camera_id'),chunk.get('location')
+        if camera and location:
+            locations.setdefault(camera,set()).add(location)
+    return jsonify({**fields,'camera_id':sorted(locations),
+        'location':sorted({v for values in locations.values() for v in values}),
+        'camera_locations':{k:sorted(v) for k,v in locations.items()}})
 
 @app.errorhandler(BadFilter)
 def bad_filter(error):
@@ -74,6 +84,8 @@ def stream(clip_id):
     def chunks():
         try:
             yield from upstream.iter_content(chunk_size=65536)
+        except requests.RequestException:
+            app.logger.warning('Video stream interrupted')
         finally:
             upstream.close()
     headers = {k:upstream.headers[k] for k in ['Content-Length','Content-Range','Accept-Ranges','ETag','Last-Modified'] if k in upstream.headers}

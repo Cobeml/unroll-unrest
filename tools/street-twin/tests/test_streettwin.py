@@ -24,6 +24,12 @@ class GroundingTests(unittest.TestCase):
         self.assertEqual(observations(c),{})
         self.assertEqual(build_recommendations([c]),[])
 
+    def test_negative_crossing_parking_and_slow_flow_do_not_alert(self):
+        self.assertEqual(observations(clip('No pedestrians are crossing the street. Vehicles are not parked at the curb. Traffic is not moving slowly.')), {})
+
+    def test_delivery_vehicle_alone_does_not_establish_curb_placement(self):
+        self.assertNotIn('curb_use_review', observations(clip('A USPS truck is parked in the middle of the road.')))
+
     def test_detection_cooccurrence_does_not_establish_proximity(self):
         self.assertEqual(build_recommendations([clip('A routine street scene.')]),[])
 

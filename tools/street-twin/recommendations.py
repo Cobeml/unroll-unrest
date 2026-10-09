@@ -5,7 +5,7 @@ from observations import observations, LABELS
 
 TEMPLATES = {
     'cyclist_passage_review': {
-        'title':'Cyclist passage narrows.', 'severity':'review',
+        'title':'Lane obstruction on a cycling route.', 'severity':'review',
         'observation':'Captions describe lane obstruction along a cycling route.',
         'action':'Review loading placement and space available for cyclists.'},
     'curb_use_review': {

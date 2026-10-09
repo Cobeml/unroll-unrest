@@ -13,10 +13,10 @@ def observations(clip):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     found = {}
     for sentence in sentences:
-        if re.search(r'\b(no|not|without)\b.{0,35}\b(block|obstruct|congestion|queue)', sentence):
+        if re.search(r'\b(no|not|without)\b', sentence):
             continue
         vehicle = bool(re.search(r'\b(cars?|vehicles?|trucks?|vans?|suv|sedan|taxi|taxis)\b', sentence))
-        if vehicle and re.search(r'\b(parked|stopped)\b', sentence) and re.search(r'\b(curb|delivery|postal|usps|utility)\b', sentence):
+        if vehicle and re.search(r'\b(parked|stopped)\b', sentence) and re.search(r'\b(curbs?|(?:left|right) side of (?:the )?(?:street|road))\b', sentence):
             found.setdefault('curb_use_review', sentence)
         if re.search(r'\b(pedestrians?|people|persons?)\b.{0,60}\b(crossing|crosswalk|crosses)\b', sentence):
             found.setdefault('crossing_review', sentence)

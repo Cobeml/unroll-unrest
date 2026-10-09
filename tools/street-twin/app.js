@@ -21,6 +21,8 @@ function showTab(name) {
   });
   ['analytics','evidence','spatial'].forEach(tab => $(tab+'-panel').hidden = tab !== name);
   if(name !== 'analytics') $('hero-video').pause();
+  else if(state.hero&&!matchMedia('(prefers-reduced-motion: reduce)').matches) $('hero-video').play().catch(()=>{});
+  if(name !== 'evidence') $('evidence-video').pause();
 }
 function filterParams() {
   const p=new URLSearchParams();
@@ -45,8 +47,9 @@ function renderAnalytics(data) {
   if(hero) {
     state.hero=hero;
     $('hero-video').src=streamURL(hero.id);
-    if(!matchMedia('(prefers-reduced-motion: reduce)').matches) $('hero-video').play().catch(()=>{});
-    $('hero-title').textContent=hero.observation_tags.includes('Cyclist passage')?'Delivery vehicles narrow cyclist passage.':'A recorded view of the street.';
+    if(!$('analytics-panel').hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches) $('hero-video').play().catch(()=>{});
+    $('hero-title').textContent=hero.filename.includes('GOPR0130_chunk_0004_segment_005')?'Delivery vehicles narrow cyclist passage.':hero.observation_tags.includes('Cyclist passage')?'Lane obstruction along a cycling route.':'A recorded view of the street.';
+    document.querySelector('.video-pill').textContent=hero.camera_id.includes('bike')?'↗ RIDER’S VIEW':'↗ CAMERA VIEW';
     $('hero-camera').textContent=hero.camera_id;
     $('hero-location').textContent=locationName(hero.location);
     $('hero-time').textContent=`Segment ${hero.segment_number} · ${time(hero.start_sec)}–${time(hero.end_sec)}`;
@@ -72,12 +75,22 @@ async function loadAnalytics() {
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => showTab(button.dataset.tab)));
 $('hero-open').addEventListener('click',()=>{if(state.hero) {showTab('evidence');selectClip(state.hero.id);}});
+$('location').addEventListener('change',()=>{
+  if(!state.metadata)return;
+  const location=$('location').value;
+  const cameras=state.metadata.camera_id.filter(c=>!location||(state.metadata.camera_locations[c]||[]).includes(location));
+  populateSelect('camera',cameras,'All street cameras',$('camera').value);
+});
+$('camera').addEventListener('change',()=>{
+  const locations=state.metadata?.camera_locations[$('camera').value]||[];
+  if($('location').value&&locations.length&&!locations.includes($('location').value))$('location').value=locations.length===1?locations[0]:'';
+});
 $('filters').addEventListener('submit', event => {event.preventDefault();loadAnalytics();});
 async function start() {
   try {
     state.metadata=await api('metadata');
     populateSelect('location',state.metadata.location,'All street locations','new_york');
-    populateSelect('camera',state.metadata.camera_id.filter(c=>!c.includes('warehouse')&&!c.includes('smartspace')),'All street cameras','nyc_bike_gopro-1');
+    populateSelect('camera',state.metadata.camera_id.filter(c=>(state.metadata.camera_locations[c]||[]).includes('new_york')),'All street cameras','nyc_bike_gopro-1');
     await loadAnalytics();
   } catch(error) {status(error.message,true);}
 }
@@ -174,6 +187,7 @@ $('search-form').addEventListener('submit',async event=>{
   event.preventDefault();const query=$('query').value.trim();
   if(!query)return;
   const generation=++state.generation;
+  document.querySelector('.apply').disabled=false;
   status('Searching indexed street descriptions…');
   try {
     const p=filterParams();p.set('query',query);
@@ -204,11 +218,13 @@ function renderRecommendations() {
 }
 document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',async()=>{
   const generation=++state.generation;
+  document.querySelector('.apply').disabled=false;
   status('Opening a verified archive example…');
   try {
     const data=await api('demo/'+button.dataset.demo);
     if(generation!==state.generation)return;
-    $('location').value='new_york';$('camera').value='nyc_bike_gopro-1';
+    $('location').value='new_york';
+    populateSelect('camera',state.metadata.camera_id.filter(c=>(state.metadata.camera_locations[c]||[]).includes('new_york')),'All street cameras','nyc_bike_gopro-1');
     $('start-date').value='';$('end-date').value='';$('query').value=data.demo.query;
     clearPlayer();renderAnalytics(data);showTab('evidence');
     await selectClip(data.clips[0].id);

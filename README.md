@@ -336,3 +336,9 @@ If it fails, or you need more help, run `/ask-cosmos`. The skill shares a snippe
 
 Everything the skills need is already in your environment. `config.example` in this repo
 lists every variable with a description.
+
+## StreetTwin app
+
+StreetTwin turns existing street footage into sampled analytics, structured planning reviews, and playable evidence with YOLO context. The default view uses first-person NYC cycling footage.
+
+Deploy with `bash tools/street-twin/deploy.sh`, then open [the workshop](https://workshop.thecosmoslabs.com) → **App**. See [the StreetTwin run guide and three-query demo](tools/street-twin/README.md) for setup, evidence semantics, corpus notes, and the future Spatial interface.
