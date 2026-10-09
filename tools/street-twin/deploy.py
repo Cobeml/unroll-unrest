@@ -69,7 +69,8 @@ def deploy():
         'template':{'metadata':{'labels':labels},'spec':{'containers':[{
             'name':'app','image':'python:3.12-slim','imagePullPolicy':'IfNotPresent',
             'ports':[{'containerPort':8080}],
-            'env':[{'name':k,'valueFrom':{'secretKeyRef':{'name':APP+'-vss-creds','key':k}}} for k in secret],
+            'env':[{'name':k,'valueFrom':{'secretKeyRef':{'name':APP+'-vss-creds','key':k}}} for k in secret]+[
+                {'name':'STREETTWIN_PUBLIC_PATH','value':'/app/'}],
             'workingDir':'/code','volumeMounts':[{'name':'code','mountPath':'/code','readOnly':True}],
             'command':['sh','-c'],
             'args':['pip install --no-cache-dir -q -r requirements.txt && exec gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 180 main:app'],

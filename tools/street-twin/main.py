@@ -2,8 +2,9 @@
 import os
 import re
 import requests
+import hashlib
 from pathlib import Path
-from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context
+from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context, render_template_string
 from vss import VSS, UpstreamError
 from spatial import SPATIAL_INTERFACE
 from policy import policy_report
@@ -11,7 +12,20 @@ from service import filters_from, sample, BadFilter, analytics, matches, demo
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
+app.config['PUBLIC_PATH'] = os.environ.get('STREETTWIN_PUBLIC_PATH', '/')
 vss = VSS()
+
+def app_shell():
+    # Ingress strips /app before Flask sees the request. Resolve the public
+    # mount on the server so CSS and scripts also work without inline JS.
+    prefix = request.headers.get('X-Forwarded-Prefix') or request.script_root or app.config['PUBLIC_PATH']
+    if not re.fullmatch(r'/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*', prefix) or any(p in {'.', '..'} for p in prefix.split('/')):
+        prefix = app.config['PUBLIC_PATH']
+    public_path = prefix.rstrip('/') + '/'
+    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css'])).hexdigest()[:12]
+    response = Response(render_template_string((ROOT / 'index.html').read_text(), public_path=public_path, asset_version=version), mimetype='text/html')
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 @app.errorhandler(UpstreamError)
 def upstream_error(error):
@@ -142,13 +156,13 @@ def stats():
 
 @app.get('/')
 def index():
-    return send_from_directory(ROOT, 'index.html')
+    return app_shell()
 
 @app.get('/policy/<review_id>')
 def policy_page(review_id):
     if not re.fullmatch(r'[a-f0-9]{16}',review_id):
         return jsonify(error='Policy unavailable'),404
-    return send_from_directory(ROOT,'index.html')
+    return app_shell()
 
 @app.get('/assets/<path:name>')
 def asset(name):

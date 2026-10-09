@@ -108,6 +108,30 @@ class PolicyTests(unittest.TestCase):
 
 
 class PolicyRouteTests(unittest.TestCase):
+    def test_shell_assets_keep_the_public_mount_without_inline_script(self):
+        from main import app
+        from html.parser import HTMLParser
+        from urllib.parse import urljoin
+        class Links(HTMLParser):
+            def handle_starttag(self,tag,attrs):
+                attrs=dict(attrs)
+                if tag=='base':self.base=attrs['href']
+                if tag=='link' and attrs.get('rel')=='stylesheet':self.css=attrs['href']
+                if tag=='script':self.script=attrs.get('src')
+        with patch.dict(app.config,{'PUBLIC_PATH':'/app/'}),app.test_client() as client:
+            for route in ['/', '/policy/'+'a'*16]:
+                with client.get(route) as response:
+                    page=Links();page.feed(response.text)
+                    self.assertEqual(page.base,'/app/')
+                    self.assertTrue(urljoin(page.base,page.css).startswith('/app/assets/style.css?v='))
+                    self.assertTrue(urljoin(page.base,page.script).startswith('/app/assets/app.js?v='))
+                    self.assertEqual(response.headers['Cache-Control'],'no-store')
+            with client.get('/',headers={'X-Forwarded-Prefix':'/gateway/team/app'}) as response:
+                self.assertIn('<base href="/gateway/team/app/">',response.text)
+            for invalid in ['//evil.example','/../evil','https://evil.example/','/bad"prefix']:
+                with client.get('/',headers={'X-Forwarded-Prefix':invalid}) as response:
+                    self.assertIn('<base href="/app/">',response.text)
+
     def test_shareable_route_and_scoped_missing_report(self):
         from main import app
         a=clip('A cyclist passes a truck parked at the curb, partially blocking the lane.')

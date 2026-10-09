@@ -45,6 +45,12 @@ Policy pages return 404 when the current view has no supporting report. Stable r
 
 Other routes: `/api/metadata`, `/api/stats`, `/api/recommendations`, `/api/evidence/<id>`, `/api/detections/<id>`, `/api/stream/<id>`, `/api/demo/{passage,crossing,queue}`, `/api/spatial`, `/health`, and `POST /api/reason/<id>`. Server-side JWT refresh and Range streaming are unchanged. Caches are short-lived and in memory; credentials/JWTs are not sent to the browser. Derived VastDB storage is unnecessary.
 
+## Loading and diagnostics
+
+HTML declares its public base path on the server; assets do not depend on an inline script. The deployment sets `STREETTWIN_PUBLIC_PATH=/app/`; local development defaults to `/`. A reverse proxy can supply a full `X-Forwarded-Prefix` mount. Policy deep links use the same base. HTML is not cached, and CSS/JavaScript URLs carry a content version to prevent mixed frontend releases. Failed archive requests show a short message and Retry.
+
+The team kubeconfig allows StreetTwin pod logs, rollout status, and pod events. It does not provide the user's browser Console/Network history, authenticated workshop session, or the workshop gateway's private logs. If the workshop view differs from the checked Ingress, capture the browser URL path and the first Console error or failed Network request (path, HTTP status, and content type); exclude credentials and tokens.
+
 ## Spatial status
 
 The main view reserves a 3D street viewport with orbit/zoom controls and the selected segment reference. Its grid is an empty viewer scaffold: no reconstructed buildings, camera poses, or invented 3D object positions are displayed. `GET /api/spatial` remains `connected: false`. Object highlighting currently operates on real 2D YOLO frame boxes.

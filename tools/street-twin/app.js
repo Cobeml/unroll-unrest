@@ -9,8 +9,19 @@ const state={clips:[],recommendations:[],selected:null,metadata:null,detections:
 const policyId=location.pathname.match(/\/policy\/([a-f0-9]{16})\/?$/)?.[1];
 function url(path){return new URL(path,document.baseURI);}
 function apiURL(path){return url('api/'+path).href;}
-function status(message='',error=false){$('status').textContent=message;$('status').classList.toggle('error',error);}
-async function api(path,options={}){const response=await fetch(apiURL(path),options);const data=await response.json();if(!response.ok)throw new Error(data.error||'Archive unavailable');return data;}
+function status(message='',error=false){$('status').textContent=message;$('status').classList.toggle('error',error);$('retry').hidden=!error;}
+async function api(path,options={}){
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),150000);
+ try{
+  const response=await fetch(apiURL(path),{...options,signal:controller.signal});
+  if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('App route unavailable. Reopen App from the workshop.');
+  const data=await response.json();if(!response.ok)throw new Error(data.error||'Archive unavailable');return data;
+ }catch(error){
+  if(error.name==='AbortError')throw new Error('Archive response timed out. Retry to load footage.');
+  if(error instanceof TypeError)throw new Error('Connection interrupted. Retry to load footage.');
+  throw error;
+ }finally{clearTimeout(timeout);}
+}
 function choose(id,values,placeholder,selected=''){$(id).innerHTML=`<option value="">${esc(placeholder)}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(id==='location'?locationName(v):v)}</option>`).join('');$(id).value=values.includes(selected)?selected:'';}
 function filterParams(){const p=new URLSearchParams({view:'archive'});[['location','location'],['camera_id','camera'],['start','start'],['end','end']].forEach(([k,id])=>{if($(id).value)p.set(k,$(id).value);});if($('query').value.trim())p.set('query',$('query').value.trim());return p;}
 function policyURL(id){const href=url('policy/'+id);href.search=state.context;return href.href;}
@@ -48,7 +59,6 @@ async function selectClip(clip){
  const index=state.clips.findIndex(c=>c.id===clip.id);
  $('clip-index').textContent=`${index+1} / ${state.clips.length}`;$('previous').disabled=index<=0;$('next').disabled=index>=state.clips.length-1;
  document.querySelectorAll('.citation').forEach(c=>c.classList.toggle('selected',c.dataset.id===clip.id));
- if(!matchMedia('(prefers-reduced-motion: reduce)').matches)$('video').play().catch(()=>{});
  const results=await Promise.allSettled([api('evidence/'+clip.id),api('detections/'+clip.id)]);
  if(selection!==state.selection)return;
  if(results[0].status==='fulfilled'){state.selected={...clip,...results[0].value};renderClipDetails(state.selected);}
@@ -76,24 +86,22 @@ function currentFrame(){
  const frame=candidates.sort((a,b)=>Math.abs(a.time_sec-t)-Math.abs(b.time_sec-t))[0];
  return frame&&Math.abs(frame.time_sec-t)<.12?frame:null;
 }
+let overlayKey='';
 function drawDetections(){
- const video=$('video'),canvas=$('detections'),ctx=canvas.getContext('2d');
- const w=video.clientWidth,h=video.clientHeight;
- if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
- ctx.clearRect(0,0,w,h);
- if(!$('show-detections').checked||!video.videoWidth)return;
- const frame=currentFrame();if(!frame)return;
+ const video=$('video'),overlay=$('detections'),w=video.clientWidth,h=video.clientHeight;
+ const frame=$('show-detections').checked&&video.videoWidth?currentFrame():null;
+ const key=[state.selected?.id,frame?.time_sec,state.highlight,w,h].join(':');
+ if(key===overlayKey)return;overlayKey=key;
+ overlay.setAttribute('viewBox',`0 0 ${w||1} ${h||1}`);
+ if(!frame){overlay.replaceChildren();return;}
  const [fh,fw]=frame.shape||state.detections.video_shape;
  const scale=Math.min(w/video.videoWidth,h/video.videoHeight),dw=video.videoWidth*scale,dh=video.videoHeight*scale;
  const ox=(w-dw)/2,oy=(h-dh)/2,sx=dw/fw,sy=dh/fh;
- ctx.font='10px monospace';ctx.lineWidth=1.6;
- for(const d of frame.detections){
-  if(d.confidence<.5||!colors[d.label]||(state.highlight!=='all'&&state.highlight!==d.label))continue;
+ overlay.innerHTML=frame.detections.filter(d=>d.confidence>=.5&&colors[d.label]&&(state.highlight==='all'||state.highlight===d.label)).map(d=>{
   const [x1,y1,x2,y2]=d.bbox,x=ox+x1*sx,y=oy+y1*sy;
-  ctx.strokeStyle=colors[d.label];ctx.strokeRect(x,y,(x2-x1)*sx,(y2-y1)*sy);
-  const text=`${d.label} ${Math.round(d.confidence*100)}%`,ty=Math.max(oy,y-16);
-  ctx.fillStyle='#0d1c16d9';ctx.fillRect(x,ty,ctx.measureText(text).width+8,16);ctx.fillStyle=colors[d.label];ctx.fillText(text,x+4,ty+11);
- }
+  const label=`${d.label} ${Math.round(d.confidence*100)}%`,ty=Math.max(oy,y-18),color=colors[d.label];
+  return `<g><rect x="${x}" y="${y}" width="${(x2-x1)*sx}" height="${(y2-y1)*sy}" fill="none" stroke="${color}" stroke-width="1.6"/><rect x="${x}" y="${ty}" width="${label.length*6.5+8}" height="18" fill="#182b21e6"/><text x="${x+4}" y="${ty+13}" fill="${color}" font-size="12">${esc(label)}</text></g>`;
+ }).join('');
 }
 function navigateClip(delta){const index=state.clips.findIndex(c=>c.id===state.selected?.id);const clip=state.clips[index+delta];if(clip)selectClip(clip);}
 $('previous').addEventListener('click',()=>navigateClip(-1));$('next').addEventListener('click',()=>navigateClip(1));
@@ -144,16 +152,16 @@ const orbit={yaw:.5,pitch:.6,distance:30,drag:null};
 function drawSpatial(){
  const canvas=$('spatial-canvas');if(!canvas.clientWidth)return;
  const w=canvas.clientWidth,h=canvas.clientHeight;
- if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
- const ctx=canvas.getContext('2d');ctx.clearRect(0,0,w,h);
+  canvas.setAttribute('viewBox',`0 0 ${w} ${h}`);const paths=[];
  function project(x,z){
   const rx=x*Math.cos(orbit.yaw)-z*Math.sin(orbit.yaw),rz=x*Math.sin(orbit.yaw)+z*Math.cos(orbit.yaw);
   const depth=orbit.distance+rz*Math.cos(orbit.pitch);if(depth<2)return null;
   const f=Math.min(w,h)*.8;
   return [w/2+rx*f/depth,h*.68+rz*Math.sin(orbit.pitch)*f/depth];
  }
- ctx.strokeStyle='#64836138';ctx.lineWidth=.6;
- for(let n=-24;n<=24;n+=2){for(const line of [[[n,-24],[n,24]],[[-24,n],[24,n]]]){const a=project(...line[0]),b=project(...line[1]);if(a&&b){ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();}}}
+
+ for(let n=-24;n<=24;n+=2){for(const line of [[[n,-24],[n,24]],[[-24,n],[24,n]]]){const a=project(...line[0]),b=project(...line[1]);if(a&&b){paths.push(`M${a[0]},${a[1]}L${b[0]},${b[1]}`);}}}
+ canvas.innerHTML=`<path d="${paths.join(' ')}" fill="none" stroke="#64836160" stroke-width=".7"/>`;
 }
 $('spatial-canvas').addEventListener('pointerdown',e=>{orbit.drag={x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);});
 $('spatial-canvas').addEventListener('pointermove',e=>{if(!orbit.drag)return;orbit.yaw+=(e.clientX-orbit.drag.x)*.008;orbit.pitch=Math.max(.2,Math.min(1.3,orbit.pitch+(e.clientY-orbit.drag.y)*.006));orbit.drag={x:e.clientX,y:e.clientY};drawSpatial();});
@@ -176,3 +184,4 @@ async function start(){
  }catch(e){status(e.message,true);}
 }
 start();
+$('retry').addEventListener('click',()=>{status('Loading street footage…');if(policyId)loadPolicy();else if(state.metadata)loadView(state.context);else start();});
