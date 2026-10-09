@@ -23,7 +23,7 @@ jobs = Jobs(scenes,vss)
 analyses = AnalysisManager(vss, spatial=scenes)
 app.config['MAX_CONTENT_LENGTH'] = 8192
 
-def app_shell(template='index.html'):
+def app_shell(template='ride.html'):
     # Ingress strips /app before Flask sees the request. Resolve the public
     # mount on the server so CSS and scripts also work without inline JS.
     prefix = request.headers.get('X-Forwarded-Prefix') or request.script_root or app.config['PUBLIC_PATH']
@@ -311,7 +311,10 @@ def finding_page(finding_id):
 def policy_page(review_id):
     if not re.fullmatch(r'[a-f0-9]{16}',review_id):
         return jsonify(error='Policy unavailable'),404
-    return app_shell()
+    # The retired archive layout is never rendered. Its evidence API remains
+    # available to MCP; current stakeholder pages use scene-specific routes.
+    from flask import redirect
+    return redirect(app.config['PUBLIC_PATH'].rstrip('/')+'/discover',code=302)
 
 @app.get('/assets/<path:name>')
 def asset(name):

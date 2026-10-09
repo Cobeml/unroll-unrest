@@ -84,7 +84,20 @@ The bindings file must give a verified existing `original_video` and a list of c
 bash tools/street-twin/with-runtime.sh .venv/bin/python tools/street-twin/mcp_bridge.py
 ```
 
-Connect another agent using the executable path to `with-runtime.sh` and arguments pointing to the virtualenv Python and `mcp_bridge.py`. The wrapper sets the deployed API base; it does not expose VSS/service tokens to the agent.
+Configure your MCP client's stdio process (replace `/ABS/REPO` with the checkout path):
+
+```json
+{
+  "command": "bash",
+  "args": [
+    "/ABS/REPO/tools/street-twin/with-runtime.sh",
+    "/ABS/REPO/.venv/bin/python",
+    "/ABS/REPO/tools/street-twin/mcp_bridge.py"
+  ]
+}
+```
+
+Start a new agent session with this server enabled. The wrapper sets the deployed API base; it does not expose VSS/service tokens to the agent.
 
 Fifteen tools expose search, clip evidence, paginated YOLO, saved spatial scenes/context, demo/crossing details, analytics, legacy grounded policies and durable processing runs. `get_ride_insights(scene_id)` and `get_crossing_detail(object_id, scene_id)` work on newly reconstructed scenes. `list_processing_runs()` and `get_processing_run(job_id)` expose progress/provenance only. MCP cannot upload, start, retry, deploy or change DataEngine. Require linked segment evidence and read rejected reviews before recommending action.
 

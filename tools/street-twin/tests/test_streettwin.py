@@ -114,12 +114,13 @@ class PolicyRouteTests(unittest.TestCase):
                 if tag=='script':self.script=attrs.get('src')
         with patch.dict(app.config,{'PUBLIC_PATH':'/app/'}),app.test_client() as client:
             self.assertEqual(client.get('/archive').status_code,302)
-            for route in ['/policy/'+'a'*16]:
+            self.assertEqual(client.get('/policy/'+'a'*16).status_code,302)
+            for route in ['/', '/ride']:
                 with client.get(route) as response:
                     page=Links();page.feed(response.text)
                     self.assertEqual(page.base,'/app/')
-                    self.assertTrue(urljoin(page.base,page.css).startswith('/app/assets/style.css?v='))
-                    self.assertTrue(urljoin(page.base,page.script).startswith('/app/assets/app.js?v='))
+                    self.assertTrue(urljoin(page.base,page.css).startswith('/app/assets/ride.css?v='))
+                    self.assertTrue(urljoin(page.base,page.script).startswith('/app/assets/ride.js?v='))
                     self.assertEqual(response.headers['Cache-Control'],'no-store')
             with client.get('/',headers={'X-Forwarded-Prefix':'/gateway/team/app'}) as response:
                 self.assertIn('<base href="/gateway/team/app/">',response.text)
@@ -138,7 +139,7 @@ class PolicyRouteTests(unittest.TestCase):
         with patch('main.vss.metadata',return_value={}),patch('main.analyses.start',return_value={'id':'a'*16,'status':'complete'}),patch('main.analyses.result',return_value=data):
             with app.test_client() as client:
                 with client.get('/policy/'+review_id) as page:
-                    self.assertEqual(page.status_code,200)
+                    self.assertEqual(page.status_code,302)
                 report=client.get('/api/policy/'+review_id)
                 self.assertEqual(report.status_code,200)
                 self.assertEqual(report.json['statistics']['evidence_clips'],2)
