@@ -6,6 +6,7 @@ from pathlib import Path
 from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context
 from vss import VSS, UpstreamError
 from spatial import SPATIAL_INTERFACE
+from policy import policy_report
 from service import filters_from, sample, BadFilter, analytics, matches, demo
 
 ROOT = Path(__file__).parent
@@ -47,6 +48,27 @@ def get_demo(name):
 def get_recommendations():
     filters=filters_from(request.args,vss.metadata())
     return jsonify(recommendations=sample(vss,filters)['recommendations'])
+
+@app.get('/api/policy/<review_id>')
+def get_policy(review_id):
+    if not re.fullmatch(r'[a-f0-9]{16}',review_id):
+        raise UpstreamError(404)
+    if request.args.get('demo'):
+        data=demo(vss,request.args['demo'])
+    else:
+        filters=filters_from(request.args,vss.metadata())
+        query=request.args.get('query','').strip()
+        if query:
+            if not 3<=len(query)<=500:
+                raise BadFilter('Describe the scene in 3–500 characters.')
+            clips=[c for c in vss.search(query,filters) if c and matches(c,filters)]
+            data=analytics(clips,filters=filters)
+        else:
+            data=sample(vss,filters)
+    report=policy_report(data,review_id)
+    if report is None:
+        return jsonify(error='This policy has no supporting clips in this view.'),404
+    return jsonify(report)
 
 @app.get('/api/spatial')
 def spatial_interface():
@@ -121,6 +143,12 @@ def stats():
 @app.get('/')
 def index():
     return send_from_directory(ROOT, 'index.html')
+
+@app.get('/policy/<review_id>')
+def policy_page(review_id):
+    if not re.fullmatch(r'[a-f0-9]{16}',review_id):
+        return jsonify(error='Policy unavailable'),404
+    return send_from_directory(ROOT,'index.html')
 
 @app.get('/assets/<path:name>')
 def asset(name):

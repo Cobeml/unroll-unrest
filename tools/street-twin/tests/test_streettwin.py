@@ -83,4 +83,43 @@ class AuthTests(unittest.TestCase):
         request.side_effect=UpstreamError(404)
         self.assertFalse(v.detections(c['id'])['available'])
 
+
+class PolicyTests(unittest.TestCase):
+    def test_policy_denominator_uses_its_camera_and_citations(self):
+        from policy import policy_report
+        a=clip('A cyclist passes a USPS truck parked at the curb, partially blocking the lane.')
+        b=clip('Routine street activity.','s3://archive/segments/b.mp4')
+        elsewhere=clip('A cyclist passes a truck partially blocking the lane.','s3://archive/segments/c.mp4')
+        elsewhere['camera_id']='other'
+        data=analytics([a,a,b,elsewhere])
+        review=next(r for r in data['recommendations'] if r['type']=='cyclist_passage_review' and r['camera_id']=='bike')
+        report=policy_report(data,review['id'])
+        self.assertEqual(report['statistics']['sampled_clips'],2)
+        self.assertEqual(report['statistics']['evidence_clips'],1)
+        self.assertEqual(report['statistics']['support_percent'],50)
+        self.assertEqual(report['clips'][0]['source'],a['source'])
+        self.assertEqual(report['clips'][0]['citation_number'],1)
+        self.assertIsNone(policy_report(data,'unknown'))
+
+    def test_overlapping_evidence_time_is_not_double_counted(self):
+        from policy import interval_seconds
+        a=clip('Routine.');b={**a,'start_sec':3,'end_sec':8}
+        self.assertEqual(interval_seconds([a,b]),8)
+
+
+class PolicyRouteTests(unittest.TestCase):
+    def test_shareable_route_and_scoped_missing_report(self):
+        from main import app
+        a=clip('A cyclist passes a truck parked at the curb, partially blocking the lane.')
+        data=analytics([a])
+        review_id=data['recommendations'][0]['id']
+        with patch('main.vss.metadata',return_value={}),patch('main.sample',return_value=data):
+            with app.test_client() as client:
+                self.assertEqual(client.get('/policy/'+review_id).status_code,200)
+                report=client.get('/api/policy/'+review_id)
+                self.assertEqual(report.status_code,200)
+                self.assertEqual(report.json['statistics']['evidence_clips'],1)
+                self.assertEqual(client.get('/api/policy/'+'0'*16).status_code,404)
+                self.assertEqual(client.get('/policy/invalid').status_code,404)
+
 if __name__=='__main__':unittest.main()
