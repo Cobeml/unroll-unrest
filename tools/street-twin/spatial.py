@@ -314,6 +314,18 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
            'quality':QUALITY,'bindings':normalized,'assets':assets}
     if not 0<scene['cam_h']<10 or not 1<scene['hfov']<180:raise SpatialError('Invalid camera assumptions.')
     if visibility:scene['visibility']=visibility
+    if raw.get('rules') and raw.get('overlays') is not None:
+        # Keep the upstream presentation data as a derived, registered JSON asset.
+        # It contains estimates/reviews, separate from admitted policy facts.
+        from ride_demo import viewer_export
+        body=json.dumps(viewer_export(raw,scene),allow_nan=False).encode()
+        if len(body)>8*1024*1024:raise SpatialError('Viewer document exceeds size limit.')
+        bodies['viewer']=body
+        assets['viewer']={'sha256':hashlib.sha256(body).hexdigest(),'size':len(body),'mime':'application/json',
+            'url':f'api/spatial/scenes/{sid}/assets/viewer'}
+    if manifest.get('verification'):
+        scene['source_verification']={'method':'visual_frame_match','archive_filename':str(manifest.get('verification',{}).get('archive_filename',''))[:160],
+            'frame_time_sec':number(manifest.get('verification',{}).get('frame_time_sec',0))}
     scene['hash']=hashlib.sha256(json.dumps(scene,sort_keys=True,allow_nan=False).encode()).hexdigest()
     store.publish(scene,bodies)
     return scene

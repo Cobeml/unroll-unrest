@@ -1,4 +1,4 @@
-"""StreetTwin: a thin, same-origin interface to the indexed VSS archive."""
+"""Unfold: a saved crossing-sightline demo and indexed VSS archive."""
 import os
 import re
 import requests
@@ -10,6 +10,7 @@ from spatial import SPATIAL_INTERFACE, SceneStore, SpatialError
 from policy import policy_report
 from service import filters_from, sample, BadFilter, analytics, matches, demo
 from analysis import AnalysisManager, context_from
+from ride_demo import demo_document, SCENE_ID
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
@@ -19,15 +20,15 @@ scenes = SceneStore()
 analyses = AnalysisManager(vss, spatial=scenes)
 app.config['MAX_CONTENT_LENGTH'] = 8192
 
-def app_shell():
+def app_shell(template='index.html'):
     # Ingress strips /app before Flask sees the request. Resolve the public
     # mount on the server so CSS and scripts also work without inline JS.
     prefix = request.headers.get('X-Forwarded-Prefix') or request.script_root or app.config['PUBLIC_PATH']
     if not re.fullmatch(r'/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*', prefix) or any(p in {'.', '..'} for p in prefix.split('/')):
         prefix = app.config['PUBLIC_PATH']
     public_path = prefix.rstrip('/') + '/'
-    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css','cockpit.js'])).hexdigest()[:12]
-    response = Response(render_template_string((ROOT / 'index.html').read_text(), public_path=public_path, asset_version=version), mimetype='text/html')
+    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css','cockpit.js','ride.js','ride.css'])).hexdigest()[:12]
+    response = Response(render_template_string((ROOT / template).read_text(), public_path=public_path, asset_version=version), mimetype='text/html')
     response.headers['Cache-Control'] = 'no-store'
     return response
 
@@ -153,10 +154,13 @@ def detections(clip_id):
 @app.get('/api/stream/<clip_id>')
 def stream(clip_id):
     row = vss.get_segment(segment_id(clip_id))
+    return stream_source(row['source'])
+
+def stream_source(source):
     range_header = request.headers.get('Range')
     if range_header and not re.fullmatch(r'bytes=(?:[0-9]+-[0-9]*|-[0-9]+)', range_header):
         return jsonify(error='Unsupported video range'), 416
-    upstream = vss.request('videos/stream', params={'source':row['source']},
+    upstream = vss.request('videos/stream', params={'source':source},
                            stream=True, range_header=range_header)
     def chunks():
         try:
@@ -171,6 +175,32 @@ def stream(clip_id):
     response = Response(stream_with_context(chunks()), status=upstream.status_code, headers=headers)
     response.call_on_close(upstream.close)
     return response
+
+@app.get('/api/ride')
+def ride_data():
+    return jsonify(demo_document(scenes,vss))
+
+@app.get('/api/ride/video')
+def ride_video():
+    from ride_demo import PARENT_FILENAME
+    scene=scenes.scene(SCENE_ID)
+    if not scene.get('bindings'):raise SpatialError('Demo video is not linked.',503)
+    vss.archive()
+    row=vss.get_segment(scene['bindings'][0]['segment_id'])
+    source=row.get('original_video','')
+    if source.rsplit('/',1)[-1]!=PARENT_FILENAME:raise SpatialError('Demo archive source mismatch.',503)
+    return stream_source(source)
+
+@app.post('/api/ride/analysis')
+def ride_analysis():
+    doc=demo_document(scenes,vss)
+    row=vss.get_segment(doc['clips'][0]['id'])
+    def analyze():
+        question='Describe the indexed ride and the crossing around 16–20 seconds. Explain a maintenance proposal to improve the crossing sightline. Separate video observations from these imported spatial estimates and vision-review results: '+str(doc['findings'])+'. Distances/speeds are uncalibrated estimates. The right-side hedge claim is supported by the imported frame review; the left-side spatial claim was rejected by that review. Do not infer a collision, legal violation, traffic delay or a measured risk reduction. Cite segment numbers and timestamps; mention uncertainty.'
+        result=vss.request('videos/synthesize',data={'original_video':row['original_video'],'question':question,'max_segments':6})
+        return {'answer':result.get('answer') or result.get('llm_synthesis',{}).get('response') or 'No video synthesis returned.',
+            'scope':'demo_parent_and_imported_spatial_context','scene_hash':doc['scene_hash'],'segment_ids':[c['id'] for c in doc['clips']]}
+    return jsonify(vss.cache.get(('ride-analysis',doc['scene_hash']),analyze,ttl=1800))
 
 @app.get('/api/search')
 def search():
@@ -197,7 +227,18 @@ def stats():
 
 @app.get('/')
 def index():
-    return app_shell()
+    return app_shell('index.html' if request.args.get('demo') or request.args.get('view') else 'ride.html')
+
+@app.get('/ride')
+def ride_page():return app_shell('ride.html')
+
+@app.get('/archive')
+def archive_page():return app_shell()
+
+@app.get('/finding/<finding_id>')
+def finding_page(finding_id):
+    if not re.fullmatch(r'crossing-[0-9]{1,8}-(?:left|right)',finding_id):raise SpatialError('Finding unavailable.',404)
+    return app_shell('ride.html')
 
 @app.get('/policy/<review_id>')
 def policy_page(review_id):
@@ -209,13 +250,13 @@ def policy_page(review_id):
 def asset(name):
     if name in {'vendor/three.module.min.js','vendor/OrbitControls.js'}:
         return send_from_directory(ROOT, name)
-    if name not in {'app.js', 'cockpit.js', 'style.css', 'street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg'}:
+    if name not in {'app.js', 'cockpit.js', 'style.css', 'ride.js','ride.css','ride-preview.jpg','street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg'}:
         return jsonify(error='Asset unavailable'), 404
     return send_from_directory(ROOT, name)
 
 @app.get('/health')
 def health():
-    return jsonify(status='ok', product='StreetTwin')
+    return jsonify(status='ok', product='Unfold', demo='Crosswalk sightlines')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', '8080')))

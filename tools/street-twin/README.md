@@ -1,6 +1,20 @@
-# StreetTwin
+# Unfold — Crosswalk Sightlines
 
-Street bottlenecks, object detections, and paired policy/infrastructure recommendations grounded in indexed video evidence. A serif, off-white shell around an immersive 3D street cockpit, with archive video, YOLO overlays and cited reports. Reconstruction runs on the teammate’s machine; StreetTwin imports its saved outputs.
+The UnfoldUnrest ride demo on the existing VSS infrastructure: synchronized indexed bike video, a saved LingBot street reconstruction, crossing visibility, stopping-model comparisons, vision-review agreement/disagreement, and cited maintenance proposals. The default page uses the actual `20261008_074640_GX050001_chunk_0000.mp4` archive video. Reconstruction remains on the teammate’s machine. The VM imports saved outputs; no live reconstruction or new-video submission is required.
+
+## Demo first
+
+Open [the workshop](https://workshop.thecosmoslabs.com) → **App**. The home page is **Unfold**; the existing archive/search workflow is available through **Video archive** (`/archive`).
+
+1. **Play the ride.** The same indexed 30-second video drives the 3D rider, route, object boxes, visibility grid and sightline overlays. Story mode slows playback to 0.4× around the assessed crossing and displays a slowdown label; all timestamps remain source-video times.
+2. **Jump to crossing 2.** Click its timeline marker or crossing entry. The saved reconstruction estimates 97% of the right waiting area hidden near a 10 m modeled stopping distance, becoming fully visible about 5.3 m out. The imported Qwen review agrees that a hedge screens it. The left-side spatial claim is retained as disputed because the vision review rejects it.
+3. **Open “Trim the hedge at crossing 2.”** Its page has the action, estimated statistics, paired evidence images, two indexed segment references, camera/location, and replay links. **Read Cosmos video analysis** synthesizes the same six archive segments with the imported spatial/review context; it cannot change the saved structured proposal.
+4. Use **Behind the rider**, **Whole street**, **Look around**, **What the rider saw**, and **3D points** to inspect the reconstruction. Toggle **Sightlines → YOLO objects → No overlays** on the video. Space plays/pauses; arrow keys jump between crossings.
+5. Show the other two crossings: one starts too close to assess; the rider turns at the other. The demo preserves these gaps rather than filling them with findings.
+
+The 125 m route length, speed, stopping distances, footprints and visibility percentages are imported estimates using a 1.1 m assumed camera height, 1.5 s reaction time and 3 m/s² braking. The daylighting proposal calls for inspection/maintenance, not a legal or calibrated safety verdict. All six clip bindings were verified against the named archive parent; its frame at 16.2162 s visually matches the saved crossing evidence. No map video was downloaded or uploaded. `ride-preview.jpg` is a first-frame image derived from that indexed parent.
+
+Demo endpoints: `GET /api/ride` returns the saved viewer data plus structured `findings[]` (`type`, `severity`, `metrics`, `segment_refs[]`); `GET /api/ride/video` proxies only the registered demo parent with Range support; `POST /api/ride/analysis` requests/caches Cosmos synthesis. `/finding/crossing-228-right` is the recommendation page. Map assets and the original archive remain in the existing infrastructure; CSS, JavaScript and Three.js are served locally.
 
 ## Run and deploy
 
@@ -25,7 +39,7 @@ python -m unittest discover -s tools/street-twin/tests -v
 
 One worker is required because analysis jobs and archive registration are in memory. Development preview is for testing; the deployed App is the deliverable. Never commit `.env` files or credentials.
 
-## Three-minute demo
+## Archive comparison demos
 
 1. **Find the bottleneck.** Click **Blocked passage**. The red sedan occupies part of the riding path; the rider steers around it. Footage loads immediately while background analysis diagnoses the obstruction. Use **car** to highlight YOLO boxes and **Play evidence** to watch the maneuver.
 2. **Open the policy recommendation.** Choose **Keep the riding path clear**. Show one local episode, two cited clips, and 10 seconds of referenced footage. Citations distinguish the obstruction from the avoidance maneuver. Open **Implementation & evidence limits** for the responsible function, curb-rule checks, and follow-up. Reload the report URL to demonstrate shareable evidence.
@@ -56,6 +70,8 @@ Scope these to New York / `nyc_bike_gopro-1`. Semantic ranking can vary; the cor
 The third clip was inspected at 0, 2 and 4 seconds of playback. It shows close passage between vehicles; no collision was visible in those sampled frames. “Biker close call”/“crash” search results did not establish a crash, so the UI does not label this clip as one or manufacture a recommendation. `traffic-preview.jpg` is a derived first-frame image tied only to this segment.
 
 ## How recommendations are generated
+
+The default crossing demo reads a checksum-validated saved export and requires explicit bindings to the named archive parent. It preserves the full crossing-end visibility samples, blocker references, stopping-model estimates and imported vision reviews. A covered, screened side with an agreeing review can produce a hedge-maintenance proposal; rejected reviews produce no proposal. An unreviewed spatial finding can only request inspection. References are computed from the actual overlapping archive intervals. The JSON action and statistics are deterministic; the optional Cosmos synthesis receives both the indexed video and imported spatial context, with their provenance and limitations.
 
 The pipeline retrieves candidate clips, expands neighboring evidence, synthesizes a diagnosis from indexed video-reasoning captions, validates every quotation, computes statistics, and chooses interventions from a mechanism-specific catalogue. Ordinary street observations remain descriptive; keyword matches no longer produce recommendation cards.
 
@@ -95,7 +111,7 @@ The visualizer adapts [UnfoldUnrest](https://github.com/exploring-curiosity/Unfo
 
 The scene’s timeline is independent when its video is unlinked. A linked scene synchronizes registered archive clips, their YOLO overlays and the rider position using explicit offsets. No automatic 2D-to-3D object identity match is claimed. Missing maps preserve the archive player; missing WebGL uses the imported overhead image.
 
-The deployed demo includes saved run `20261009-125354-biker`: a 29.8-second route, 400,000 source points, 230 objects and an animated visibility grid. The map loads automatically; **Explore** enables orbit controls. Its source is `biker.mp4`, which has no exact archive-parent match, so the UI labels its timeline separately and policy recommendations continue to cite indexed footage. Selecting a map preserves the current demo/search scope. No map video was downloaded or uploaded.
+The deployed demo includes saved run `20261009-125354-biker`: a 29.8-second route, 400,000 source points, 230 objects and an animated visibility grid. The teammate's `biker.mp4` is a renamed copy of `20261008_074640_GX050001_chunk_0000.mp4`, verified by the matching 16.2162-second frame. Six explicit archive bindings now synchronize the saved reconstruction and video. Future imported runs still require their own verified bindings; filenames are never automatically guessed.
 
 A completed upstream bundle needs `run.json` (if available), `app/ride.json`, its overhead image, point-coordinate/color binaries, and referenced evidence images. MP4 files are ignored. Partial runs, invalid paths, excessive sizes, nonfinite coordinates and malformed timelines are rejected. The import accepts a directory, not an arbitrary archive or remote asset URL.
 
@@ -172,7 +188,7 @@ codex mcp add street-twin -- bash "$STREETTWIN_ROOT/tools/street-twin/with-runti
 
 The bridge runs locally beside Codex and calls the deployed app. The wrapper derives its API base from team configuration without putting secrets in the Codex command. Reopen the Codex window and check `/mcp`. [Official Codex MCP setup](https://developers.openai.com/codex/mcp).
 
-Tools: `search_clips`, `get_clip_evidence`, `get_detections`, `list_spatial_scenes`, `get_spatial_scene`, `get_spatial_context`, `get_analytics`, `get_recommendations`, `get_analysis_status`, and `get_policy_report`. YOLO frames are paginated; spatial context is capped at 80 objects. Full point clouds stay behind asset links. Recommendation reads can start/reuse inference jobs, but no tool writes to the archive, uploads media, deploys or starts reconstruction. A different machine must have this bridge installed and a reachable `STREETTWIN_API_BASE`; this release does not host a remote MCP transport.
+Tools: `search_clips`, `get_clip_evidence`, `get_detections`, `list_spatial_scenes`, `get_spatial_scene`, `get_spatial_context`, `get_ride_demo`, `get_crossing_detail`, `get_analytics`, `get_recommendations`, `get_analysis_status`, and `get_policy_report`. `get_crossing_detail(228)` exposes both sides, samples, blockers and the confirmed/rejected reviews for this demo. YOLO frames are paginated; spatial context is capped at 80 objects. Full point clouds stay behind asset links. Recommendation reads can start/reuse inference jobs, but no tool writes to the archive, uploads media, deploys or starts reconstruction. A different machine must have this bridge installed and a reachable `STREETTWIN_API_BASE`; this release does not host a remote MCP transport.
 
 Suggested agent task: “Find an observed passage obstruction, inspect its clips and YOLO context, inspect spatial facts only if explicitly linked, and propose a policy/infrastructure action with segment and spatial references. Distinguish observed maneuvers from estimated geometry.”
 
@@ -183,6 +199,8 @@ Suggested agent task: “Find an observed passage obstruction, inspect its clips
 # Optional browser wiring check; uses temporary synthetic map data, never deployed.
 # Install Playwright and Chromium separately if they are absent.
 xvfb-run -a .venv/bin/python tools/street-twin/tests/browser_smoke.py
+# Opt-in demo check against an already running app with the imported saved scene.
+UNFOLD_TEST_BASE=http://127.0.0.1:8128/ xvfb-run -a .venv/bin/python tools/street-twin/tests/ride_browser_smoke.py
 ```
 
 The browser check covers `/app/` assets, desktop/mobile WebGL, camera/timeline controls, report navigation and citations. Deployment uses server-side apply for large ConfigMaps, avoiding Kubernetes’ client annotation-size limit. Code/module ConfigMaps are versioned so an update does not partially overwrite the running app. For rollback, use the previous StreetTwin Deployment revision; imported S3 map assets persist.

@@ -42,7 +42,7 @@ class MCPProtocolTests(unittest.IsolatedAsyncioTestCase):
             async with stdio_client(params) as (read,write):
                 async with ClientSession(read,write) as session:
                     await session.initialize();tools=(await session.list_tools()).tools
-                    self.assertEqual(len(tools),10);self.assertTrue(all(t.annotations.readOnlyHint for t in tools))
+                    self.assertEqual(len(tools),12);self.assertTrue(all(t.annotations.readOnlyHint for t in tools))
                     self.assertFalse(any('upload' in t.name or 'deploy' in t.name for t in tools))
                     result=await session.call_tool('list_spatial_scenes',{})
                     self.assertFalse(result.isError);self.assertEqual(result.structuredContent['scenes'][0]['id'],'test-run')

@@ -47,7 +47,7 @@ with sync_playwright() as p:
    response=c.get(path)
    r.fulfill(status=response.status_code,headers=dict(response.headers),body=response.data)
  page.route('**/*',route)
- page.goto('http://streettwin.test/app/?demo=bottleneck',wait_until='domcontentloaded')
+ page.goto('http://streettwin.test/app/archive?demo=bottleneck',wait_until='domcontentloaded')
  page.wait_for_function("document.getElementById('clip-index').textContent.includes('/')",timeout=15000)
  assert not errors,errors
  assert page.locator('#video').is_visible()

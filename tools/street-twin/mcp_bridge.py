@@ -1,4 +1,4 @@
-"""Read-only stdio MCP bridge to StreetTwin's combined evidence APIs."""
+"""Read-only stdio MCP bridge to Unfold's combined evidence APIs."""
 import math
 import os
 import re
@@ -8,7 +8,7 @@ import requests
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-mcp=FastMCP('StreetTwin',instructions='Use indexed clips and YOLO for observed events; spatial facts are estimates. Require explicit clip linkage before combining evidence. Do not infer parking legality, delay or vehicle identity from standing objects. All tools are read-only.')
+mcp=FastMCP('Unfold',instructions='Use indexed clips and YOLO for observed events; spatial facts are estimates. Require explicit clip linkage before combining evidence. Read the saved crossing demo and both confirmed and rejected reviews before making maintenance proposals. Do not infer parking legality, delay or vehicle identity from standing objects. All tools are read-only.')
 READ=ToolAnnotations(readOnlyHint=True,destructiveHint=False,openWorldHint=True)
 
 
@@ -20,9 +20,9 @@ def api(path,params=None):
     if os.environ.get('STREETTWIN_APP_TOKEN'):headers['Authorization']='Bearer '+os.environ['STREETTWIN_APP_TOKEN']
     try:
         r=requests.get(base+'api/'+path,params=params,headers=headers,timeout=(10,150),allow_redirects=False)
-        if r.status_code not in {200,202}:return {'error':'StreetTwin data unavailable. Check the app connection and identifiers.','status':r.status_code}
+        if r.status_code not in {200,202}:return {'error':'Unfold data unavailable. Check the app connection and identifiers.','status':r.status_code}
         return r.json()
-    except (requests.RequestException,ValueError):return {'error':'StreetTwin connection unavailable.'}
+    except (requests.RequestException,ValueError):return {'error':'Unfold connection unavailable.'}
 
 
 def segment(value):
@@ -91,6 +91,25 @@ def get_spatial_context(scene_id:str,segment_id:str='',start_sec:float=0,end_sec
         if end_sec is not None:p['end']=end_sec
     if object_id:p['object_id']=scene(object_id)
     return api('spatial/context',p)
+
+
+@mcp.tool(annotations=READ)
+def get_ride_demo()->dict[str,Any]:
+    """Read saved demo statistics, assumptions, indexed clips and structured maintenance proposals."""
+    result=api('ride')
+    for key in ['objects','overlays','path']:result.pop(key,None)
+    return result
+
+
+@mcp.tool(annotations=READ)
+def get_crossing_detail(object_id:int)->dict[str,Any]:
+    """Read both crossing ends, visibility samples, blockers and confirmed/rejected imported reviews."""
+    if not 0<=object_id<=1000000:raise ValueError('Choose an existing crossing object ID.')
+    result=api('ride')
+    if result.get('error'):return result
+    crossing=next((o for o in result.get('objects',[]) if o['id']==object_id and o['group']=='crosswalk'),None)
+    if crossing is None:return {'error':'Crossing unavailable.'}
+    return {'scene_id':result['scene_id'],'scene_hash':result['scene_hash'],'rules':result['rules'],'crossing':crossing,'basis':'imported_spatial_estimate_and_vision_review'}
 
 
 @mcp.tool(annotations=READ)
