@@ -63,7 +63,7 @@ Wait for the VM to load. That's it. You're in! No setup. Nothing to install, no 
 
 ### Coding Agent
 
-> 💡 Need credits? Sign up for Cursor first, then <a href="https://forms.gle/AVta9RRTmfdeUNX26" target="_blank" rel="noopener">request Cursor credits (and top-ups)</a>.
+> 💡 All registrants who checked in received Cursor credits. Confirm yours at <a href="https://cursor.com/dashboard/usage" target="_blank" rel="noopener">cursor.com/dashboard/usage</a>, each request should show as `Free`. Didn't sign up for Cursor? Sign up, then <a href="https://forms.gle/AVta9RRTmfdeUNX26" target="_blank" rel="noopener">request credits</a>. Need more credits or a top-up? Use the same form.
 
 Describe what you want in plain language and let the code agent build. That's how the skills are meant to be used.
 To get started, sign in using the Cursor IDE:
