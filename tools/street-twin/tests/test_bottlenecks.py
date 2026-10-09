@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from bottlenecks import allowed_claims, validate_findings
+from recommendations import build_recommendations, validate_recommendation, detection_statistics
 
 
 def fixture(name='20261008_074847_GX050001_chunk_0005.mp4'):
@@ -74,6 +75,39 @@ class DiagnosisTests(unittest.TestCase):
         self.assertEqual(len(validate_findings(json.dumps(p),fixture())),1)
         p['findings'][0]['movement_effect'][0]['segment_number']=True
         with self.assertRaises(ValueError):validate_findings(json.dumps(p),fixture())
+
+
+class InterventionTests(unittest.TestCase):
+    def test_paired_actions_and_tampering(self):
+        clips=fixture();events=validate_findings(json.dumps(proposal(clips)),clips)
+        reviews=build_recommendations(clips,events)
+        self.assertEqual({r['category'] for r in reviews},{'policy','infrastructure'})
+        self.assertEqual(len({r['bottleneck_id'] for r in reviews}),1)
+        for review in reviews:
+            self.assertTrue(validate_recommendation(review,clips))
+            for key,value in [('action','Fine the driver during peak hours.'),('metrics',{'evidence_clips':9,'delay_seconds':20})]:
+                bad=copy.deepcopy(review);bad[key]=value
+                self.assertFalse(validate_recommendation(bad,clips))
+            bad=copy.deepcopy(review);bad['segment_refs'][0]['source']='s3://unrelated/clip.mp4'
+            self.assertFalse(validate_recommendation(bad,clips))
+        self.assertIn('Measure',reviews[1]['prerequisites'][0])
+        self.assertEqual(reviews[0]['metrics']['evidence_seconds'],10)
+        self.assertNotIn('delay_seconds',reviews[0]['metrics'])
+
+    def test_detection_metrics_threshold_peaks_and_absence(self):
+        clips=fixture();c=clips[2]
+        sidecars={c['id']:{'available':True,'frames':[
+            {'detections':[{'label':'car','confidence':.8},{'label':'car','confidence':.6},{'label':'truck','confidence':.49}]},
+            {'detections':[{'label':'car','confidence':.8}]}]}}
+        metrics=detection_statistics(clips,sidecars)
+        self.assertEqual(metrics['detection_clips'],1)
+        self.assertEqual(metrics['detected_classes'],[{'label':'car','clip_count':1,'peak_per_frame':2}])
+        self.assertEqual(detection_statistics(clips,{})['detected_classes'],[])
+        events=validate_findings(json.dumps(proposal(clips)),clips)
+        review=build_recommendations(clips,events,sidecars)[0]
+        self.assertTrue(validate_recommendation(review,clips,sidecars))
+        bad=copy.deepcopy(review);bad['metrics']['detected_classes'][0]['peak_per_frame']=99
+        self.assertFalse(validate_recommendation(bad,clips,sidecars))
 
 
 if __name__=='__main__':unittest.main()
