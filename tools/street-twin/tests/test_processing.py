@@ -30,6 +30,17 @@ class ProcessingTests(unittest.TestCase):
         self.assertNotIn('original_video',self.jobs.public(a))
         self.remote.request.return_value={'code_version':'v2'}
         self.assertNotEqual(a['id'],self.jobs.start(self.sid)['id'])
+    def test_public_api_requires_canonical_input_and_persists_restart_status(self):
+        from main import app
+        with patch('main.jobs',self.jobs),app.test_client() as client:
+            self.assertEqual(client.post('/api/runs',json={'url':'https://example.com/video.mp4'}).status_code,400)
+            self.assertEqual(client.post('/api/runs',json=['invalid']).status_code,400)
+            result=client.post('/api/runs',json={'segment_id':self.sid})
+            self.assertEqual(result.status_code,202)
+            self.assertNotIn('original_video',result.json)
+            self.assertEqual(client.get('/api/runs/'+result.json['id']).json['status'],'queued')
+            self.assertEqual(len(client.get('/api/runs').json['runs']),1)
+            self.assertEqual(client.get('/api/runs/not-a-run').status_code,404)
     def test_unindexed_or_nonstreet_input_is_not_transferred(self):
         with self.assertRaises(SpatialError):self.jobs.start('https://example.com/video')
         self.row['capture_type']='warehouse'
@@ -81,5 +92,30 @@ class ProcessingTests(unittest.TestCase):
             {'id':'c'*20,'capture_type':'warehouse','original_video':'other'}])
         result=discover(self.vss,'close-call',{'time_filter':'all','metadata_filters':{}})
         self.assertEqual(len(result),1);self.assertNotIn('verified',result[0])
+
+    def test_completed_run_imports_verified_provenance_and_structured_action(self):
+        from test_spatial import make_bundle
+        from test_ride_demo import crossing_export
+        job=self.jobs.start(self.sid)
+        self.row['segment_end_sec']=10
+        job.update(remote_run_id='run1',transfer_verified=True,source_sha256='1'*64,source_bytes=42)
+        self.jobs.save(job)
+        run,raw=make_bundle(Path(self.tmp.name)/'export')
+        crossing_export(raw)
+        (run/'app/ride.json').write_text(json.dumps(raw))
+        (run/'run.json').write_text(json.dumps({'id':'run1','status':'done','code_version':'v1'}))
+        self.remote.base='https://service.example';self.remote.token='unused-test-token'
+        self.remote.request.return_value={'id':'run1','status':'done','source':{'vm_job_id':job['id']}}
+        self.vss.request=Mock(return_value={'answer':'Indexed footage and imported review support a hedge inspection.'})
+        with patch('processing.pull',return_value=run):self.jobs.advance(job)
+        saved=self.jobs.get(job['id'])
+        self.assertEqual(saved['status'],'complete');self.assertEqual(saved['analysis_status'],'complete')
+        self.assertEqual(saved['summary']['recommendations'],1)
+        self.assertEqual(self.store.scene('run1')['source_verification']['source_sha256'],'1'*64)
+        analysis=json.loads(self.store.get('analyses/run1.json'))
+        self.assertEqual(analysis['segment_ids'],[self.sid])
+        self.assertIn('rejected',self.vss.request.call_args.kwargs['data']['question'])
+        self.remote.request.return_value={'status':'done','source':{'vm_job_id':'different'}}
+        with self.assertRaisesRegex(SpatialError,'provenance mismatch'):self.jobs.advance(job)
 
 if __name__=='__main__':unittest.main()

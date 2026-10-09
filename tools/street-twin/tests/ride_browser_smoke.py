@@ -12,6 +12,7 @@ with sync_playwright() as p:
  page.on('pageerror',lambda e:errors.append(str(e)))
  page.goto(base,wait_until='domcontentloaded',timeout=30000)
  page.wait_for_function('!!window.UnfoldDemo',timeout=60000)
+ assert page.locator('#headline').inner_text()=='A hedge screens crossing 2.'
  assert page.locator('#error-banner').is_hidden()
  assert len(page.locator('.recommendation').all())==1
  assert 'Trim the hedge' in page.locator('.recommendation').inner_text()

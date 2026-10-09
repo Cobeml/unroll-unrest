@@ -21,9 +21,9 @@ vid.addEventListener('error',()=>{ $('error-banner').hidden=false;$('error-banne
 const ortho = new Image();ortho.src=href(D.ortho);
 await new Promise((resolve,reject)=>{ortho.onload=resolve;ortho.onerror=()=>reject(new Error('Saved map image unavailable. Refresh to retry.'));});
 const byId = Object.fromEntries(D.objects.map(o => [o.id, o]));
-const cws = D.objects.filter(o => o.group === 'crosswalk' && o.ends).sort((a, b) => a.t_pass - b.t_pass);
+const cws = D.objects.filter(o => o.group === 'crosswalk' && o.ends?.length).sort((a, b) => a.t_pass - b.t_pass);
 cws.forEach((c, i) => c.n = i + 1);
-const S = D.stats, E = D.extent, CAM_H = D.cam_h || 1.1, RULES = D.rules || {};
+const S = D.stats, E = {...D.extent,res:D.extent.res||((D.extent.x1-D.extent.x0)/ortho.width)}, CAM_H = D.cam_h || 1.1, RULES = D.rules || {};
 const WIN = RULES.window_m ?? 12, TH = RULES.target_h ?? 1, CLEAR = RULES.clear ?? .9;
 // a side of a crossing: hidden (under half of it in view where stopping must start), part hidden, in view, not judged
 const level = e => !e.covered ? 'none' : e.seen_at_stop >= CLEAR ? 'clear' : e.review?.claim === 'rejected' ? 'disputed'
@@ -50,7 +50,7 @@ function hiders(e) {                        // "a hedge", "3 hedges", "4 lamp po
 const TAIL = 1.0;                           // s past the crossing the inspection lasts
 
 // The story leads with the action; detail stays on its own page.
-$('headline').textContent=D.findings?.length?'A clearer crossing.':'The street, reconstructed.';
+$('headline').textContent=D.findings?.length?(D.findings[0].title.startsWith('Trim the hedge')?`A hedge screens crossing ${D.findings[0].crossing}.`:'A crossing needs inspection.'):'The street, reconstructed.';
 $('sub').textContent=`${S.crosswalks ?? cws.length} crossings · ${S.crossings_judged ?? 0} assessed · ${Math.round(S.duration)} seconds`;
 function title(c) {
  const w=worst(c),lv=level(w);
@@ -411,12 +411,15 @@ scrub.onpointerup = () => { dragging = false; };
 
 // ---- the video and its boxes ----
 function drawOverlay(t) {
-  const r = devicePixelRatio || 1, b = ov.getBoundingClientRect(), W = Math.round(b.width * r), H = Math.round(b.height * r);
-  if (ov.width !== W || ov.height !== H) { ov.width = W; ov.height = H; }
-  const ctx = ov.getContext('2d'); ctx.clearRect(0, 0, W, H);
+  const r = devicePixelRatio || 1, b = ov.getBoundingClientRect(), fullW=Math.round(b.width*r),fullH=Math.round(b.height*r);
+  if(!fullW||!fullH)return;
+  if(ov.width!==fullW||ov.height!==fullH){ov.width=fullW;ov.height=fullH;}
+  const ratio=(vid.videoWidth||D.frame_size[0])/(vid.videoHeight||D.frame_size[1]);
+  const W=Math.min(fullW,fullH*ratio),H=W/ratio;
+  const ctx=ov.getContext('2d');ctx.clearRect(0,0,fullW,fullH);ctx.save();ctx.translate((fullW-W)/2,(fullH-H)/2);
   const k = Math.round(t * D.fps), boxes = D.overlays[k] || [], sx = W / D.frame_size[0], sy = H / D.frame_size[1];
-  if(overlayMode==='yolo'){drawYOLO(ctx,t,W,H);return;}
-  if(overlayMode==='none')return;
+  if(overlayMode==='yolo'){drawYOLO(ctx,t,W,H);ctx.restore();return;}
+  if(overlayMode==='none'){ctx.restore();return;}
   const act = inspecting(t), key = new Set(act ? act.ends.flatMap(e => e.blockers.map(b => b.id)) : []);
   ctx.font = `700 ${11 * r}px Georgia`; ctx.textBaseline = 'bottom';
   for (const [id, x0, y0, x1, y1] of boxes) {
@@ -446,6 +449,7 @@ function drawOverlay(t) {
       ctx.fillStyle = f.seen >= CLEAR ? '#fff' : f.seen >= .5 ? '#1e2022' : '#fff'; ctx.fillText(txt, top[0] - w / 2 + 4 * r, top[1] - 5 * r);
     }
   }
+  ctx.restore();
 }
 
 // ---- controls ----
@@ -491,7 +495,13 @@ function warmDetections(t){const clip=currentClip(t);if(!clip||clip.id===detecti
 function drawYOLO(ctx,t,W,H){warmDetections(t);const clip=currentClip(t),data=detectionCache.get(clip?.id);if(!data?.available)return;const local=t-clip.start_sec,frames=data.frames||[];const f=frames.reduce((best,f)=>Math.abs((f.time_sec??f.timestamp_sec??f.frame_index/(data.fps||30))-local)<Math.abs((best?.time_sec??best?.timestamp_sec??best?.frame_index/(data.fps||30)??1e9)-local)?f:best,null);if(!f||Math.abs((f.time_sec??f.timestamp_sec??0)-local)>.15)return;const shape=f.shape||data.video_shape||[1080,1920],sx=W/(shape[1]||1920),sy=H/(shape[0]||1080);ctx.font='13px Georgia, serif';for(const o of f.detections||[]){if((o.confidence??0)<.5)continue;const b=o.bbox||o.box;if(!b||b.length!==4)continue;ctx.strokeStyle='#90cfe3';ctx.fillStyle='#90cfe3';ctx.lineWidth=2;ctx.strokeRect(b[0]*sx,b[1]*sy,(b[2]-b[0])*sx,(b[3]-b[1])*sy);ctx.fillText(o.class_name||o.label||'object',b[0]*sx,b[1]*sy-4);}}
 $('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overlayMode==='yolo'?'none':'spatial';$('overlay-mode').textContent=overlayMode==='spatial'?'Sightlines':overlayMode==='yolo'?'YOLO objects':'No overlays';if(overlayMode==='yolo')warmDetections(vid.currentTime);};
 const findings=D.findings||[];
-$('recommendations').innerHTML=findings.length?findings.map(f=>`<a class="recommendation" href="${href(ridePath+'/recommendations/'+f.id)}"><span>${escape(f.title)}</span><span aria-hidden="true">↗</span></a>`).join(''):'<p class="empty-insight">No supported maintenance action found.</p>';
+let insightPage=0;
+function renderInsights(){
+ const visible=findings.slice(insightPage*2,insightPage*2+2);
+ $('recommendations').innerHTML=visible.length?visible.map(f=>`<a class="recommendation" href="${href(ridePath+'/recommendations/'+f.id)}"><span>${escape(f.title)}</span><span aria-hidden="true">↗</span></a>`).join(''):'<p class="empty-insight">No supported maintenance action found.</p>';
+ if(findings.length>2){$('recommendations').insertAdjacentHTML('beforeend',`<div class="pager insights-pager"><button id="insight-prev" ${insightPage===0?'disabled':''}>Previous</button><span>${insightPage+1} / ${Math.ceil(findings.length/2)}</span><button id="insight-next" ${(insightPage+1)*2>=findings.length?'disabled':''}>Next</button></div>`);$('insight-prev').onclick=()=>{insightPage--;renderInsights();};$('insight-next').onclick=()=>{insightPage++;renderInsights();};}
+}
+renderInsights();
 const findingId=location.pathname.match(/\/(?:finding|recommendations)\/(crossing-[0-9]+-(?:left|right))/)?.[1];
 const finding=findings.find(f=>f.id===findingId);
 function paginateText(container,text){
@@ -508,8 +518,8 @@ function renderReport(f){
   figure.hidden=which!=='video';vid.pause();
   document.querySelectorAll('[data-tab]').forEach(b=>{b.setAttribute('aria-selected',b.dataset.tab===which);b.tabIndex=b.dataset.tab===which?0:-1;});
   content.setAttribute('aria-labelledby','tab-'+which);
-  if(which==='action')content.innerHTML=`<span class="eyebrow">Maintenance proposal</span><h2>Clear the waiting area from view obstructions.</h2><p class="large-copy">${escape(f.action)}</p><p class="small-note">${escape(f.limitations)}</p><button class="primary" id="show-frames">See the supporting frames ↗</button>`;
-  if(which==='statistics')content.innerHTML=`<p class="eyebrow">Imported spatial estimates</p><div class="policy-metrics">${[[pct(f.metrics.hidden_fraction),'waiting area hidden'],[mm(f.metrics.estimated_stop_m),'modeled stopping distance'],[f.metrics.estimated_clear_m==null?'—':mm(f.metrics.estimated_clear_m),'fully in view']].map(([v,l])=>`<div><strong>${v}</strong><span>${l}</span></div>`).join('')}</div><p>From the ${escape(f.side)} approach at ${f.scene_time_sec.toFixed(1)} s. These values use an assumed camera height, not a calibrated survey.</p><p class="small-note">${S.stopped ?? 0} standing vehicle footprints · ${D.objects.filter(o=>o.motion==='moving').length} moving · ${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='unknown').length} uncertain. Standing does not distinguish parking from queuing.</p>`;
+  if(which==='action')content.innerHTML=`<span class="eyebrow">Maintenance proposal</span><h2>Restore the crossing sightline.</h2><p class="large-copy">${escape(f.action)}</p><p class="small-note">${escape(f.limitations)}</p><button class="primary" id="show-frames">See the supporting frames ↗</button>`;
+  if(which==='statistics')content.innerHTML=`<p class="eyebrow">Imported spatial estimates</p><div class="policy-metrics">${[[pct(f.metrics.hidden_fraction),'waiting area hidden'],[mm(f.metrics.estimated_stop_m),'modeled stopping distance'],[f.metrics.estimated_clear_m==null?'—':mm(f.metrics.estimated_clear_m),'fully in view']].map(([v,l])=>`<div><strong>${v}</strong><span>${l}</span></div>`).join('')}</div><p>From the ${escape(f.side)} approach at ${f.scene_time_sec.toFixed(1)} s. These values use an assumed camera height, not a calibrated survey.</p><p class="small-note">${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='standing').length} standing vehicle footprints · ${D.objects.filter(o=>o.motion==='moving').length} moving · ${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='unknown').length} uncertain. Standing does not distinguish parking from queuing.</p>`;
   if(which==='frames')content.innerHTML=`<figure class="review-image">${f.evidence_url?`<img src="${href(f.evidence_url)}" alt="${escape(f.side)} waiting area at modeled stopping distance, compared with the later approach">`:'<p>No frame export available.</p>'}<figcaption>At modeled stopping distance / later on the approach · imported review ${escape(f.review.claim)}</figcaption></figure>`;
   if(which==='video'){
    content.innerHTML=`<div class="video-slot"></div><div class="evidence-links">${f.segment_refs.map(r=>`<button class="evidence-link" data-seek="${r.start_sec}">${r.start_sec.toFixed(1)}–${r.end_sec.toFixed(1)} s · ${escape(r.camera_id)}</button>`).join('')}</div>`;
