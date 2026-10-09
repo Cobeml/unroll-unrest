@@ -410,7 +410,7 @@ scrub.onpointerdown = e => { dragging = true; scrub.setPointerCapture(e.pointerI
 scrub.onpointermove = e => { if (dragging) scrubTo(e); };
 scrub.onpointerup = () => { dragging = false; };
 
-// ---- the video and its boxes ----
+// ---- saved 3D sightline prisms projected onto the source video ----
 function drawOverlay(t) {
   const r = devicePixelRatio || 1, b = ov.getBoundingClientRect(), fullW=Math.round(b.width*r),fullH=Math.round(b.height*r);
   if(!fullW||!fullH)return;
@@ -418,23 +418,12 @@ function drawOverlay(t) {
   const ratio=(vid.videoWidth||D.frame_size[0])/(vid.videoHeight||D.frame_size[1]);
   const W=Math.min(fullW,fullH*ratio),H=W/ratio;
   const ctx=ov.getContext('2d');ctx.clearRect(0,0,fullW,fullH);ctx.save();ctx.translate((fullW-W)/2,(fullH-H)/2);
-  const k = Math.round(t * D.fps), boxes = D.overlays[k] || [], sx = W / D.frame_size[0], sy = H / D.frame_size[1];
+  const k = Math.round(t * D.fps), sx = W / D.frame_size[0], sy = H / D.frame_size[1];
   if(overlayMode==='yolo'){drawYOLO(ctx,t,W,H);ctx.restore();return;}
   if(overlayMode==='none'){ctx.restore();return;}
-  const act = inspecting(t), key = new Set(act ? act.ends.flatMap(e => e.blockers.map(b => b.id)) : []);
+  // A saved projection can exist even when coverage is insufficient for a verdict.
+  const act = inspecting(t) || cws.find(c => c.ends.some(e => e.frames.some(f => f.k === k && f.poly)));
   ctx.font = `700 ${11 * r}px Georgia`; ctx.textBaseline = 'bottom';
-  for (const [id, x0, y0, x1, y1] of boxes) {
-    const o = byId[id]; let col, label = '';
-    if (o.group === 'vehicle') { col = o.motion==='standing' ? css('--curb') : o.motion==='unknown'?'#719bb2':'#c9cdcf'; label = key.has(id) ? o.label : ''; }
-    else if (o.footprint) { col = css('--line'); label = key.has(id) ? o.label : ''; }
-    else continue;
-    if (act && !key.has(id)) continue;                 // at a crossing, only what screens its sides
-    ctx.globalAlpha = act ? 1 : .5;
-    ctx.strokeStyle = col; ctx.lineWidth = 1.8 * r; ctx.strokeRect(x0 * sx, y0 * sy, (x1 - x0) * sx, (y1 - y0) * sy);
-    if (label) { const w = ctx.measureText(label).width + 8 * r; ctx.fillStyle = col; ctx.fillRect(x0 * sx, y0 * sy - 14 * r, w, 14 * r);
-      ctx.fillStyle = col === css('--line') || col === '#c9cdcf' ? '#1e2022' : '#fff'; ctx.fillText(label, x0 * sx + 4 * r, y0 * sy - r); }
-  }
-  ctx.globalAlpha = 1;
   // each side of the crossing ahead, as a 1 m tall box where someone about to cross would stand
   if (act) for (const e of act.ends) {
     const f = e.frames.find(f => f.k === k);
@@ -459,8 +448,12 @@ function begin() { started = true; $('go').hidden = true; document.querySelector
 function start() { begin(); vid.play().catch(()=>{ $('error-banner').hidden=false;$('error-banner').textContent='Playback unavailable. The map and recommendation evidence remain available.'; }); }
 $('go').onclick = start;
 $('play').onclick = () => { if (!started || vid.paused) start(); else vid.pause(); };
-vid.onplay = () => { begin(); $('play').textContent = 'Pause'; };
-vid.onpause = () => $('play').textContent = 'Play';
+function playbackLabel(){
+ $('play').textContent = vid.paused ? 'Play' : 'Pause';
+ const evidencePlay=$('evidence-play');if(evidencePlay)evidencePlay.textContent=vid.paused?'Play clip':'Pause clip';
+}
+vid.onplay = () => { begin(); playbackLabel(); };
+vid.onpause = playbackLabel;
 document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
   view = b.dataset.view; orbit.enabled = view === 'free';
   document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', x === b));
@@ -499,7 +492,7 @@ let overlayMode='spatial';const detectionCache=new Map();let detectionClip=null;
 function currentClip(t){return D.clips.find(c=>c.start_sec<=t&&c.end_sec>t)||D.clips.at(-1);}
 function warmDetections(t){const clip=currentClip(t);if(!clip||clip.id===detectionClip)return;detectionClip=clip.id;if(!detectionCache.has(clip.id)){detectionCache.set(clip.id,null);read('api/detections/'+clip.id).then(d=>detectionCache.set(clip.id,d)).catch(()=>detectionCache.set(clip.id,{available:false,frames:[]}));}}
 function drawYOLO(ctx,t,W,H){warmDetections(t);const clip=currentClip(t),data=detectionCache.get(clip?.id);if(!data?.available)return;const local=t-clip.start_sec,frames=data.frames||[];const f=frames.reduce((best,f)=>Math.abs((f.time_sec??f.timestamp_sec??f.frame_index/(data.fps||30))-local)<Math.abs((best?.time_sec??best?.timestamp_sec??best?.frame_index/(data.fps||30)??1e9)-local)?f:best,null);if(!f||Math.abs((f.time_sec??f.timestamp_sec??0)-local)>.15)return;const shape=f.shape||data.video_shape||[1080,1920],sx=W/(shape[1]||1920),sy=H/(shape[0]||1080);ctx.font='13px Georgia, serif';for(const o of f.detections||[]){if((o.confidence??0)<.5)continue;const b=o.bbox||o.box;if(!b||b.length!==4)continue;ctx.strokeStyle='#90cfe3';ctx.fillStyle='#90cfe3';ctx.lineWidth=2;ctx.strokeRect(b[0]*sx,b[1]*sy,(b[2]-b[0])*sx,(b[3]-b[1])*sy);ctx.fillText(o.class_name||o.label||'object',b[0]*sx,b[1]*sy-4);}}
-$('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overlayMode==='yolo'?'none':'spatial';$('overlay-mode').textContent=overlayMode==='spatial'?'Sightlines':overlayMode==='yolo'?'YOLO objects':'No overlays';if(overlayMode==='yolo')warmDetections(vid.currentTime);};
+$('overlay-mode').onclick=()=>{overlayMode=overlayMode==='spatial'?'yolo':overlayMode==='yolo'?'none':'spatial';$('overlay-mode').textContent=overlayMode==='spatial'?'3D sightlines':overlayMode==='yolo'?'YOLO objects':'No overlays';if(overlayMode==='yolo')warmDetections(vid.currentTime);};
 const findings=D.findings||[];
 let insightPage=0;
 function renderInsights(){
@@ -531,8 +524,9 @@ function renderReport(f){
   if(which==='statistics')content.innerHTML=`<p class="eyebrow">Imported spatial estimates</p><div class="policy-metrics">${[[pct(f.metrics.hidden_fraction),'waiting area hidden'],[mm(f.metrics.estimated_stop_m),'modeled stopping distance'],[f.metrics.estimated_clear_m==null?'—':mm(f.metrics.estimated_clear_m),'fully in view']].map(([v,l])=>`<div><strong>${v}</strong><span>${l}</span></div>`).join('')}</div><p>From the ${escape(f.side)} approach at ${f.scene_time_sec.toFixed(1)} s. These values use an assumed camera height, not a calibrated survey.</p><p class="small-note">${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='standing').length} standing vehicle footprints · ${D.objects.filter(o=>o.motion==='moving').length} moving · ${D.objects.filter(o=>o.group==='vehicle'&&o.motion==='unknown').length} uncertain. Standing does not distinguish parking from queuing.</p>`;
   if(which==='frames')content.innerHTML=`<figure class="review-image">${f.evidence_url?`<img src="${href(f.evidence_url)}" alt="${escape(f.side)} waiting area at modeled stopping distance, compared with the later approach">`:'<p>No frame export available.</p>'}<figcaption>At modeled stopping distance / later on the approach · imported review ${escape(f.review.claim)}</figcaption></figure>`;
   if(which==='video'){
-   content.innerHTML=`<div class="video-slot"></div><div class="evidence-links">${f.segment_refs.map(r=>`<button class="evidence-link" data-seek="${r.start_sec}">${r.start_sec.toFixed(1)}–${r.end_sec.toFixed(1)} s · ${escape(r.camera_id)}</button>`).join('')}</div>`;
-   content.querySelector('.video-slot').appendChild($('evidence-video'));seekWhenReady(f.scene_time_sec);vid.controls=true;
+   content.innerHTML=`<div class="video-slot"></div><div class="evidence-links"><button class="evidence-link" id="evidence-play">Play clip</button>${f.segment_refs.map(r=>`<button class="evidence-link" data-seek="${r.start_sec}">${r.start_sec.toFixed(1)}–${r.end_sec.toFixed(1)} s · ${escape(r.camera_id)}</button>`).join('')}</div>`;
+   content.querySelector('.video-slot').appendChild($('evidence-video'));seekWhenReady(f.scene_time_sec);
+   $('evidence-play').onclick=()=>vid.paused?start():vid.pause();
    content.querySelectorAll('[data-seek]').forEach(b=>b.onclick=()=>{seek(Number(b.dataset.seek));vid.play().catch(()=>{});});
   }else{document.body.appendChild($('evidence-video'));vid.controls=false;}
   if(which==='review'){
@@ -560,7 +554,7 @@ if(finding){renderReport(finding);seekWhenReady(finding.scene_time_sec);}
 else{
  const figure=$('evidence-video');
  document.querySelector('.cockpit').appendChild(figure);
- figure.classList.add('story-video');figure.hidden=false;vid.controls=true;
+ figure.classList.add('story-video');figure.hidden=false;
 }
 const initial=Number(new URLSearchParams(location.search).get('t'));if(Number.isFinite(initial)&&initial>0)seekWhenReady(initial);
 window.UnfoldDemo={seek,start,sceneId:D.scene_id,findings};

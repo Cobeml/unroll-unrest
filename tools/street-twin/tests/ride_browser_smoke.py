@@ -18,6 +18,9 @@ with sync_playwright() as p:
  assert 'Trim the hedge' in page.locator('.recommendation').inner_text()
  assert page.locator('#evidence-video').is_visible()
  assert page.locator('#vid').is_visible()
+ assert page.evaluate('!document.getElementById("vid").controls')
+ assert page.locator('#evidence-video').bounding_box()['width']>=450
+ assert page.locator('#overlay-mode').inner_text()=='3D sightlines'
  assert page.locator('#vid').get_attribute('src').startswith(base)
  assert page.locator('#stage canvas').is_visible()
  assert page.evaluate('getComputedStyle(document.body).fontFamily').startswith('Georgia')
@@ -28,9 +31,16 @@ with sync_playwright() as p:
  page.locator('#video-toggle').click();assert page.locator('#vid').is_hidden()
  page.wait_for_function('document.getElementById("vid").currentTime>1.5',timeout=30000)
  page.locator('#video-toggle').click();assert page.locator('#vid').is_visible()
+ page.evaluate('''() => {
+  window.overlayRects=0;window.overlayStrokes=0;
+  const proto=CanvasRenderingContext2D.prototype,rect=proto.strokeRect,stroke=proto.stroke;
+  proto.strokeRect=function(...args){if(this.canvas.id==='ov')window.overlayRects++;return rect.apply(this,args);};
+  proto.stroke=function(...args){if(this.canvas.id==='ov')window.overlayStrokes++;return stroke.apply(this,args);};
+ }''')
  page.evaluate('document.getElementById("vid").pause();window.UnfoldDemo.seek(16.25)')
  page.wait_for_function('document.getElementById("vid").currentTime>16',timeout=30000)
  page.wait_for_timeout(300);assert '97%' in page.locator('#card').inner_text()
+ assert page.evaluate('window.overlayStrokes>0 && window.overlayRects===0'),'default overlay must draw projected prisms, not 2D boxes'
  page.screenshot(path='/tmp/unfold-fullscreen-crossing.png')
  page.get_by_role('button',name='Explore',exact=True).click()
  assert page.get_by_role('button',name='Explore',exact=True).get_attribute('aria-pressed')=='true'
@@ -43,6 +53,7 @@ with sync_playwright() as p:
   page.set_viewport_size(viewport)
   for name in ['Action','Statistics','Frames','Review','Source','Video']:
    page.get_by_role('tab',name=name,exact=True).click();fits(page)
+   if name=='Video':assert page.evaluate('!document.getElementById("vid").controls')
    if name=='Review':
     first=page.locator('#report-content').inner_text()
     button=page.get_by_role('button',name='Next side')
