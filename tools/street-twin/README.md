@@ -95,6 +95,8 @@ The visualizer adapts [UnfoldUnrest](https://github.com/exploring-curiosity/Unfo
 
 The scene’s timeline is independent when its video is unlinked. A linked scene synchronizes registered archive clips, their YOLO overlays and the rider position using explicit offsets. No automatic 2D-to-3D object identity match is claimed. Missing maps preserve the archive player; missing WebGL uses the imported overhead image.
 
+The deployed demo includes saved run `20261009-125354-biker`: a 29.8-second route, 400,000 source points, 230 objects and an animated visibility grid. The map loads automatically; **Explore** enables orbit controls. Its source is `biker.mp4`, which has no exact archive-parent match, so the UI labels its timeline separately and policy recommendations continue to cite indexed footage. Selecting a map preserves the current demo/search scope. No map video was downloaded or uploaded.
+
 A completed upstream bundle needs `run.json` (if available), `app/ride.json`, its overhead image, point-coordinate/color binaries, and referenced evidence images. MP4 files are ignored. Partial runs, invalid paths, excessive sizes, nonfinite coordinates and malformed timelines are rejected. The import accepts a directory, not an arbitrary archive or remote asset URL.
 
 Local development import:
@@ -117,7 +119,7 @@ export RIDE_URL=https://your-teammate-tunnel
 bash tools/street-twin/with-runtime.sh .venv/bin/python tools/street-twin/ride_sync.py --s3
 ```
 
-For authenticated service access, set `RIDE_TOKEN` outside the repository or put only the bearer token in `/config/ride.token`. The sync command uses GET `/api/manifest` and GET `/runs/{id}/{path}` only, verifies size/SHA-256, and excludes video, logs and model files. It does not submit or rerun reconstruction. Use `--run RUN_ID` to select a completed run. Existing imported maps survive tunnel outages and pod restarts. Repeat the command when new exports are ready; there is no unattended polling.
+For authenticated service access, set `RIDE_TOKEN` or `SERVICE_TOKEN` in the environment, put only the bearer token in `/config/ride.token`, or save `SERVICE_TOKEN` in the ignored repository-root `.env`. The sync command parses token entries without executing shell commands; the token stays on this machine. It accepts both service-root and run-relative manifest paths, uses GET `/api/manifest` and GET `/runs/{id}/{path}` only, verifies size/SHA-256, and excludes video, logs and model files. It does not submit or rerun reconstruction. Use `--run RUN_ID` to select a completed run. Existing imported maps survive tunnel outages and pod restarts. Repeat the command when new exports are ready; there is no unattended polling.
 
 Team credentials cannot create S3 buckets in this environment. Deployment therefore stores assets under the app-only `street-twin/spatial/` prefix in the existing team database bucket, using S3 object operations only. No database tables or pipeline functions change, and no assets enter ingestion buckets. A separately provisioned `team-N-street-twin-spatial` bucket can instead be selected with `STREETTWIN_SPATIAL_BUCKET`. Runtime S3 credentials remain in the Kubernetes Secret. The supplied workshop VIP has a private certificate; the wrapper sets `STREETTWIN_S3_VERIFY=false` for that connection. Browser and ride-tunnel TLS verification remain enabled.
 

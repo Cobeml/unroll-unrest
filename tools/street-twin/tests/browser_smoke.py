@@ -36,7 +36,7 @@ with sync_playwright() as p:
   if path.startswith('/app/'):path=path[4:]
   data=None
   if path=='/api/metadata':data={'location':['new_york'],'camera_id':['nyc_bike_gopro-1'],'camera_locations':{'nyc_bike_gopro-1':['new_york']}}
-  elif path=='/api/analytics':data={'clips':clips,'recommendations':[],'sample_count':len(clips)}
+  elif path in {'/api/analytics','/api/demo/bottleneck'}:data={'clips':clips,'recommendations':[],'sample_count':len(clips)}
   elif path=='/api/analysis':data=job
   elif path.startswith('/api/policy/'):data=report
   elif path.startswith('/api/evidence/'):data=next(c for c in clips if c['id']==path.rsplit('/',1)[-1])
@@ -47,7 +47,7 @@ with sync_playwright() as p:
    response=c.get(path)
    r.fulfill(status=response.status_code,headers=dict(response.headers),body=response.data)
  page.route('**/*',route)
- page.goto('http://streettwin.test/app/',wait_until='domcontentloaded')
+ page.goto('http://streettwin.test/app/?demo=bottleneck',wait_until='domcontentloaded')
  page.wait_for_function("document.getElementById('clip-index').textContent.includes('/')",timeout=15000)
  assert not errors,errors
  assert page.locator('#video').is_visible()
@@ -55,6 +55,8 @@ with sync_playwright() as p:
  assert page.locator('#map-empty').is_hidden()
  assert page.locator('#scene-bar').is_visible()
  assert page.locator('#scene-link-state').inner_text()=='Archive video separate from this map'
+ page.wait_for_function("new URLSearchParams(location.search).has('scene_id')")
+ assert 'demo=bottleneck' in page.url,'Map loading cleared the demo preset'
  page.get_by_role('button',name='Explore',exact=True).click()
  assert page.get_by_role('button',name='Explore',exact=True).get_attribute('aria-pressed')=='true'
  page.locator('#scene-scrub').fill('4')

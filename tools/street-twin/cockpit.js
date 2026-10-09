@@ -184,7 +184,8 @@ async function loadScene(id){
   const initial=new URLSearchParams(location.search).get('scene_time');if(initial!=null&&Number.isFinite(Number(initial)))await seek(Number(initial));
  }catch{if(token!==loading)return;dispose();D=null;$('map-empty').hidden=false;$('map-empty').querySelector('h2').textContent='Saved map unavailable';$('scene-link-state').textContent='Re-import this scene to retry';for(const k of ['scene-bar','scene-legend','mini'])$(k).hidden=true;$('cockpit').classList.add('map-pending');}
 }
-$('scene-select').onchange=async()=>{await loadScene($('scene-select').value);loadView(filterParams());};
-try{const list=await api('spatial/scenes');for(const s of list.scenes){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;$('scene-select').appendChild(o);}const id=new URLSearchParams(location.search).get('scene_id')||'';if(list.scenes.some(s=>s.id===id)){$('scene-select').value=id;await loadScene(id);}else if(list.scenes.length===1){$('scene-select').value=list.scenes[0].id;await loadScene(list.scenes[0].id);}linkage();if($('scene-select').value&&state.context.get('scene_id')!==$('scene-select').value)loadView(filterParams());}
+function reloadSceneScope(){const p=new URLSearchParams(state.context);if($('scene-select').value)p.set('scene_id',$('scene-select').value);else p.delete('scene_id');return loadView(p);}
+$('scene-select').onchange=async()=>{await loadScene($('scene-select').value);reloadSceneScope();};
+try{const list=await api('spatial/scenes');for(const s of list.scenes){const o=document.createElement('option');o.value=s.id;o.textContent=s.name;$('scene-select').appendChild(o);}const id=new URLSearchParams(location.search).get('scene_id')||'';if(list.scenes.some(s=>s.id===id)){$('scene-select').value=id;await loadScene(id);}else if(list.scenes.length===1){$('scene-select').value=list.scenes[0].id;await loadScene(list.scenes[0].id);}linkage();if($('scene-select').value&&state.context.get('scene_id')!==$('scene-select').value)reloadSceneScope();}
 catch{$('scene-link-state').textContent='Saved-map import ready';}
 requestAnimationFrame(frame);
