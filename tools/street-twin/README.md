@@ -21,7 +21,7 @@ python -m unittest discover -s tools/street-twin/tests -v
 
 ## Three-minute demo
 
-1. The initial **Street Explorer** opens NYC cycling footage. The video plays with YOLO frame boxes. Select **bicycle**, **truck**, or **person** to highlight that class; use the arrows to browse clips. Location/camera selections update the view. Dates and semantic search are inside **Filters**; detailed captions and sources are inside **Clip details**.
+1. The initial **Street Explorer** opens NYC cycling footage with an archive-frame preview and YOLO boxes. Press the video control to play. Select **bicycle**, **truck**, or **person** to highlight that class; use the arrows to browse clips. Location/camera selections update the view. Dates and semantic search are inside **Filters**; detailed captions and sources are inside **Clip details**.
 2. Open **Review cyclist passage**. It navigates to its own shareable `/app/policy/<id>` page. The initial explored sample has six supporting clips out of 30 camera clips (20%), representing 30 seconds of cited footage. Show numbered citations, play another cited clip, inspect its source and caption, and reload the URL. Statistics are regenerated from the same filters; they can change when the underlying archive changes.
 3. Return with **Street view** and use the three compact example buttons. Each resolves a verified filename in the live archive, rather than depending on search ranking.
 
@@ -48,6 +48,8 @@ Other routes: `/api/metadata`, `/api/stats`, `/api/recommendations`, `/api/evide
 ## Loading and diagnostics
 
 HTML declares its public base path on the server; assets do not depend on an inline script. The deployment sets `STREETTWIN_PUBLIC_PATH=/app/`; local development defaults to `/`. A reverse proxy can supply a full `X-Forwarded-Prefix` mount. Policy deep links use the same base. HTML is not cached, and CSS/JavaScript URLs carry a content version to prevent mixed frontend releases. Failed archive requests show a short message and Retry.
+
+The interface uses an off-white background, local serif font fallbacks, and an SVG twin-street mark. No external font requests block rendering. Video loads on explicit play; SVG detection overlays and the empty spatial grid keep first render independent of canvas initialization. `street-preview.jpg` is the first frame extracted from the existing passage anchor (segment ID `6c04f82de23dc760739a`, parent-relative 20 seconds). It appears only for that segment, with detections from its first timestamp; other clips never inherit this preview. This is a derived image, not a new video upload.
 
 The team kubeconfig allows StreetTwin pod logs, rollout status, and pod events. It does not provide the user's browser Console/Network history, authenticated workshop session, or the workshop gateway's private logs. If the workshop view differs from the checked Ingress, capture the browser URL path and the first Console error or failed Network request (path, HTTP status, and content type); exclude credentials and tokens.
 
@@ -80,7 +82,7 @@ Once the codebase and GPU access are available, adapt in this order:
 4. Export geometry, confidence, intrinsics, and poses keyed to the same segment/frame times. Project YOLO detections through the matching depth/intrinsics/poses; moving objects need separate treatment from the static street. Preserve uncertainty and avoid interpreting uncalibrated coordinates as measured street dimensions. Cycling footage provides changing viewpoints; fixed-camera packs require separate evaluation.
 5. Serve the resulting mesh/point cloud and object associations to StreetTwin's reserved viewer through an isolated worker/API and derived-asset storage. Keep inference out of browser requests and the CPU app container. Treat this as future integration work, not an implemented pipeline.
 
-The missing information is a confirmed GPU allocation/deployment access path and the supplied codebase. There is no evidence yet to name an available GPU, assert free VRAM, promise real-time speed, or guarantee installation on the shared server.
+The user will run LingBot on a separate machine and supply its visualizer codebase and tunnel. Shared GPU deployment is no longer the planned integration path. Once supplied, inspect the visualizer's export/API contract and adapt the interface around existing segment IDs before providing a spatial analysis tool to the recommender. No tunnel client, reconstruction, or spatial agent tool is connected yet.
 
 ## Corpus notes
 

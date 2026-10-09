@@ -166,7 +166,7 @@ def policy_page(review_id):
 
 @app.get('/assets/<path:name>')
 def asset(name):
-    if name not in {'app.js', 'style.css'}:
+    if name not in {'app.js', 'style.css', 'street-preview.jpg'}:
         return jsonify(error='Asset unavailable'), 404
     return send_from_directory(ROOT, name)
 

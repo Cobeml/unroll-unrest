@@ -5,6 +5,8 @@ const time=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 const locationName=s=>({new_york:'New York',san_francisco:'San Francisco',nashville:'Nashville / I-24',neighborhood:'Neighborhood',toronto:'Toronto'}[s]||s);
 const titles={cyclist_passage_review:'Review cyclist passage',curb_use_review:'Review curb allocation',crossing_review:'Review crossing clearance',queue_review:'Review intersection approaches'};
 const colors={person:'#7bcbb7',bicycle:'#d6ed7c',car:'#90b9df',truck:'#e6c88b',bus:'#dfa6c4',motorcycle:'#b7cba5'};
+// First frame from this indexed segment only; never reuse it for other clips.
+const previewSegment='6c04f82de23dc760739a';
 const state={clips:[],recommendations:[],selected:null,metadata:null,detections:null,highlight:'all',context:new URLSearchParams(location.search),operation:0,selection:0,policy:null};
 const policyId=location.pathname.match(/\/policy\/([a-f0-9]{16})\/?$/)?.[1];
 function url(path){return new URL(path,document.baseURI);}
@@ -46,7 +48,7 @@ async function loadView(p=filterParams()){
   renderWorkspace(data);
  }catch(e){if(operation===state.operation)status(e.message,true);}
 }
-function clearVideo(){++state.selection;state.selected=null;state.detections=null;$('video').removeAttribute('src');$('video').load();$('video-empty').hidden=false;$('object-chips').innerHTML='';$('clip-time').textContent='—';$('clip-index').textContent='0 / 0';$('camera-label').textContent='No footage';$('clip-detail-content').textContent='';$('previous').disabled=true;$('next').disabled=true;$('detection-status').textContent='NO CLIP';drawDetections();}
+function clearVideo(){++state.selection;state.selected=null;state.detections=null;$('video').removeAttribute('src');$('video').removeAttribute('poster');$('video').load();$('video-empty').hidden=false;$('object-chips').innerHTML='';$('clip-time').textContent='—';$('clip-index').textContent='0 / 0';$('camera-label').textContent='No footage';$('clip-detail-content').textContent='';$('previous').disabled=true;$('next').disabled=true;$('detection-status').textContent='NO CLIP';drawDetections();}
 function renderClipDetails(clip){
  $('camera-label').textContent=clip.camera_id;
  $('clip-time').textContent=`${time(clip.start_sec)}–${time(clip.end_sec)} · Segment ${clip.segment_number}`;
@@ -55,6 +57,8 @@ function renderClipDetails(clip){
 }
 async function selectClip(clip){
  const selection=++state.selection;state.selected=clip;state.detections=null;state.highlight='all';
+ if(clip.id===previewSegment)$('video').poster=url('assets/street-preview.jpg').href;
+ else $('video').removeAttribute('poster');
  $('video-empty').hidden=true;$('video').src=apiURL('stream/'+clip.id);$('detection-status').textContent='LOADING OBJECTS';renderClipDetails(clip);renderObjects();
  const index=state.clips.findIndex(c=>c.id===clip.id);
  $('clip-index').textContent=`${index+1} / ${state.clips.length}`;$('previous').disabled=index<=0;$('next').disabled=index>=state.clips.length-1;
@@ -89,13 +93,14 @@ function currentFrame(){
 let overlayKey='';
 function drawDetections(){
  const video=$('video'),overlay=$('detections'),w=video.clientWidth,h=video.clientHeight;
- const frame=$('show-detections').checked&&video.videoWidth?currentFrame():null;
+ const frame=$('show-detections').checked&&(video.videoWidth||video.hasAttribute('poster'))?currentFrame():null;
  const key=[state.selected?.id,frame?.time_sec,state.highlight,w,h].join(':');
  if(key===overlayKey)return;overlayKey=key;
  overlay.setAttribute('viewBox',`0 0 ${w||1} ${h||1}`);
  if(!frame){overlay.replaceChildren();return;}
  const [fh,fw]=frame.shape||state.detections.video_shape;
- const scale=Math.min(w/video.videoWidth,h/video.videoHeight),dw=video.videoWidth*scale,dh=video.videoHeight*scale;
+ const vw=video.videoWidth||fw,vh=video.videoHeight||fh;
+ const scale=Math.min(w/vw,h/vh),dw=vw*scale,dh=vh*scale;
  const ox=(w-dw)/2,oy=(h-dh)/2,sx=dw/fw,sy=dh/fh;
  overlay.innerHTML=frame.detections.filter(d=>d.confidence>=.5&&colors[d.label]&&(state.highlight==='all'||state.highlight===d.label)).map(d=>{
   const [x1,y1,x2,y2]=d.bbox,x=ox+x1*sx,y=oy+y1*sy;
@@ -122,7 +127,7 @@ async function loadPolicy(){
  const back=url('./');back.search=state.context;$('back').href=back.href;
 
  try{
-  const report=await api('policy/'+policyId+'?'+state.context);state.policy=report;state.clips=report.clips;
+  const report=await api('policy/'+policyId+'?'+state.context);state.policy=report;state.clips=report.clips;$('reason-button').hidden=false;
   document.title=report.title+' — StreetTwin';$('policy-title').textContent=report.title;
   $('policy-category').textContent=report.recommendation.label.toUpperCase()+' / POLICY REVIEW';
   $('policy-location').textContent=`${locationName(report.recommendation.location)} · ${report.recommendation.camera_id}`;
@@ -135,7 +140,10 @@ async function loadPolicy(){
   $('detection-chart').innerHTML=s.detected_classes.map(c=>`<div class="detection-row"><span>${esc(c.label)}</span><div class="detection-bar"><span style="width:${c.clip_count/max*100}%"></span></div><span>${c.clip_count}</span></div>`).join('')||'<p class="note">No detection context available.</p>';
   $('policy-video-slot').appendChild(document.querySelector('.video-view'));
   $('citations').innerHTML=report.clips.map(c=>`<article class="citation" id="clip-${c.id}" data-id="${c.id}"><div class="citation-header"><span>[${c.citation_number}] ${esc(c.camera_id)} · ${time(c.start_sec)}–${time(c.end_sec)}</span><button class="play-citation" data-play="${c.id}">Play clip ↗</button></div><blockquote>${esc(c.caption_evidence)}</blockquote><details><summary>Source & full caption</summary><code>${esc(c.source)}</code><p>${esc(locationName(c.location))} · Indexed ${esc((c.indexed_at||'').slice(0,10))}</p><p>${esc(c.caption)}</p></details></article>`).join('');
-  document.querySelectorAll('[data-cite],[data-play]').forEach(link=>link.addEventListener('click',()=>selectClip(state.clips.find(c=>c.id===(link.dataset.cite||link.dataset.play)))));
+  document.querySelectorAll('[data-cite],[data-play]').forEach(link=>link.addEventListener('click',()=>{
+   selectClip(state.clips.find(c=>c.id===(link.dataset.cite||link.dataset.play)));
+   if(link.dataset.play)$('video').play().catch(()=>status('Press play on the video to view this clip.'));
+  }));
   $('footer-context').textContent='Statistics from cited archive observations';
   if(report.clips.length)selectClip(report.clips[0]);status('');
  }catch(e){status(e.message,true);$('policy-title').textContent='Policy unavailable';$('reason-button').hidden=true;}
@@ -152,7 +160,7 @@ const orbit={yaw:.5,pitch:.6,distance:30,drag:null};
 function drawSpatial(){
  const canvas=$('spatial-canvas');if(!canvas.clientWidth)return;
  const w=canvas.clientWidth,h=canvas.clientHeight;
-  canvas.setAttribute('viewBox',`0 0 ${w} ${h}`);const paths=[];
+ canvas.setAttribute('viewBox',`0 0 ${w} ${h}`);const paths=[];
  function project(x,z){
   const rx=x*Math.cos(orbit.yaw)-z*Math.sin(orbit.yaw),rz=x*Math.sin(orbit.yaw)+z*Math.cos(orbit.yaw);
   const depth=orbit.distance+rz*Math.cos(orbit.pitch);if(depth<2)return null;

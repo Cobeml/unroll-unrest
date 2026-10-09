@@ -11,6 +11,7 @@ ROOT=Path(__file__).parent
 APP='street-twin'
 FILES=['main.py','vss.py','service.py','observations.py','recommendations.py','spatial.py',
        'policy.py','index.html','style.css','app.js','requirements.txt']
+BINARY_FILES=['street-preview.jpg']
 
 def kubectl(namespace, *args, document=None):
     result=subprocess.run(['kubectl','-n',namespace,*args],
@@ -55,9 +56,10 @@ def deploy():
         if port:
             vss_url=f"http://{service['name']}:{port}"
     code={name:(ROOT/name).read_text() for name in FILES}
-    if sum(len(v.encode()) for v in code.values())>900_000:
+    binary={name:base64.b64encode((ROOT/name).read_bytes()).decode() for name in BINARY_FILES}
+    if sum(len(v.encode()) for v in code.values())+sum(len(v) for v in binary.values())>900_000:
         raise RuntimeError('App code exceeds the deployment size budget.')
-    apply(namespace,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':APP+'-code'},'data':code})
+    apply(namespace,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':APP+'-code'},'data':code,'binaryData':binary})
     # Use data rather than stringData so apply remains idempotent; no secret file is written.
     runtime={k:os.environ[k] for k in ['VSS_URL','VSS_USERNAME','VSS_PASSWORD']}
     runtime['VSS_URL']=vss_url
