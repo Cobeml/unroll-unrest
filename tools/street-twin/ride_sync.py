@@ -12,22 +12,26 @@ from spatial import SceneStore,SpatialError,import_bundle,read_json,LIMIT
 from vss import VSS
 
 
-def token(env_file=None):
-    for key in ('RIDE_TOKEN','SERVICE_TOKEN'):
+def configured(keys,env_file=None):
+    for key in keys:
         value=os.environ.get(key)
         if value and value.strip():return value.strip()
     path=Path('/config/ride.token')
-    if path.is_file():return path.read_text().strip()
+    if 'SERVICE_TOKEN' in keys and path.is_file():return path.read_text().strip()
     path=Path(env_file) if env_file else Path(__file__).resolve().parents[2]/'.env'
     values={}
     if path.is_file():
         for line in path.read_text().splitlines():
             key,sep,value=line.strip().removeprefix('export ').partition('=')
-            if sep and key.strip() in {'RIDE_TOKEN','SERVICE_TOKEN'}:
+            if sep and key.strip() in keys:
                 try:parts=shlex.split(value,comments=True)
                 except ValueError:raise SpatialError('Invalid token entry in the environment file.') from None
                 if len(parts)==1:values[key.strip()]=parts[0]
-    return values.get('RIDE_TOKEN') or values.get('SERVICE_TOKEN') or ''
+    return next((values[k] for k in keys if values.get(k)),'')
+
+def token(env_file=None):return configured(('RIDE_TOKEN','SERVICE_TOKEN'),env_file)
+
+def service_url():return configured(('RIDE_URL',))
 
 
 def pull(base,destination,*,run_id=None,access_token=None,session=None):

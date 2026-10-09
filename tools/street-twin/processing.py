@@ -10,7 +10,7 @@ import time
 from urllib.parse import urlparse
 
 import requests
-from ride_sync import pull, token
+from ride_sync import pull, token, service_url
 from spatial import SpatialError, import_bundle, read_json
 from vss import normalize
 
@@ -27,7 +27,7 @@ QUERIES = {
 
 class RideService:
     def __init__(self, base=None, access_token=None, session=None):
-        self.base = (base or os.environ.get('RIDE_URL', '')).rstrip('/')
+        self.base = (base or service_url()).rstrip('/')
         p = urlparse(self.base)
         if p.scheme not in {'http', 'https'} or not p.netloc or p.username or p.password or p.query or p.fragment:
             raise SpatialError('The reconstruction service is not configured.', 503)

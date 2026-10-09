@@ -117,6 +117,7 @@ def crossing_findings(doc,clips):
             action='Inspect the crossing approach and trim or lower the hedge that screens the waiting area. Recheck the sightline from the bike lane after maintenance.' if confirmed and planting else 'Inspect the crossing approach on site and confirm the obstruction before changing the street layout.'
             start=e.get('stop_t',c.get('t_pass',0));end=min(doc['stats']['duration'],c.get('t_pass',start)+1)
             refs=[{'segment_id':clip['id'],'camera_id':clip['camera_id'],'location':clip['location'],'start_sec':max(start,clip['start_sec']),'end_sec':min(end,clip['end_sec'])} for clip in clips if clip['start_sec']<end and clip['end_sec']>start]
+            if not refs:continue
             findings.append({'id':f'crossing-{c["id"]}-{e["side"]}','type':'crossing_sightline','severity':'review','title':title,'action':action,
                 'basis':'saved_spatial_estimate_and_imported_vision_review','review':review,'crossing':index,'object_id':c['id'],'side':e['side'],
                 'metrics':{'hidden_fraction':round(1-seen,3),'estimated_stop_m':e.get('needed_m'),'estimated_clear_m':e.get('clear_from_m'),'estimated_speed_kmh':e.get('speed_kmh')},

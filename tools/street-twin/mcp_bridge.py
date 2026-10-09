@@ -102,14 +102,35 @@ def get_ride_demo()->dict[str,Any]:
 
 
 @mcp.tool(annotations=READ)
-def get_crossing_detail(object_id:int)->dict[str,Any]:
+def get_crossing_detail(object_id:int,scene_id:str='')->dict[str,Any]:
     """Read both crossing ends, visibility samples, blockers and confirmed/rejected imported reviews."""
     if not 0<=object_id<=1000000:raise ValueError('Choose an existing crossing object ID.')
-    result=api('ride')
+    result=api('rides/'+scene(scene_id) if scene_id else 'ride')
     if result.get('error'):return result
     crossing=next((o for o in result.get('objects',[]) if o['id']==object_id and o['group']=='crosswalk'),None)
     if crossing is None:return {'error':'Crossing unavailable.'}
     return {'scene_id':result['scene_id'],'scene_hash':result['scene_hash'],'rules':result['rules'],'crossing':crossing,'basis':'imported_spatial_estimate_and_vision_review'}
+
+
+@mcp.tool(annotations=READ)
+def list_processing_runs()->dict[str,Any]:
+    """Read durable archive reconstruction jobs and links to completed stakeholder pages."""
+    return api('runs')
+
+
+@mcp.tool(annotations=READ)
+def get_processing_run(job_id:str)->dict[str,Any]:
+    """Read progress, source checksum, canonical segment and processing versions. Does not start or retry work."""
+    if not re.fullmatch('[a-f0-9]{24}',job_id):raise ValueError('Choose an existing processing job ID.')
+    return api('runs/'+job_id)
+
+
+@mcp.tool(annotations=READ)
+def get_ride_insights(scene_id:str)->dict[str,Any]:
+    """Read a reconstructed ride's findings, statistics, assumptions and indexed source clips."""
+    result=api('rides/'+scene(scene_id))
+    for key in ['objects','overlays','path']:result.pop(key,None)
+    return result
 
 
 @mcp.tool(annotations=READ)

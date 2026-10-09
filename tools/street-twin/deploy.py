@@ -10,7 +10,8 @@ import sys
 ROOT=Path(__file__).parent
 APP='street-twin'
 FILES=['main.py','vss.py','service.py','observations.py','recommendations.py','spatial.py','bottlenecks.py','analysis.py',
-       'policy.py','spatial_reasoning.py','ride_demo.py','index.html','style.css','app.js','cockpit.js','ride.html','ride.css','ride.js','requirements.txt']
+       'policy.py','spatial_reasoning.py','ride_demo.py','ride_sync.py','processing.py','discover.html','discover.js',
+       'index.html','style.css','app.js','cockpit.js','ride.html','ride.css','ride.js','requirements.txt']
 BINARY_FILES=['street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg','ride-preview.jpg']
 
 def kubectl(namespace, *args, document=None):
@@ -90,6 +91,12 @@ def deploy():
     runtime['STREETTWIN_SPATIAL_BUCKET']=bucket
     runtime['STREETTWIN_SPATIAL_PREFIX']=prefix
     runtime['STREETTWIN_S3_VERIFY']=os.environ['STREETTWIN_S3_VERIFY']
+    from ride_sync import token,service_url
+    from processing import RideService
+    remote=RideService(service_url(),token())
+    remote.request('GET','/health')
+    runtime['RIDE_URL']=remote.base
+    runtime['SERVICE_TOKEN']=remote.token
     secret={k:base64.b64encode(v.encode()).decode() for k,v in runtime.items()}
     apply(namespace,{'apiVersion':'v1','kind':'Secret','metadata':{'name':APP+'-vss-creds'},'type':'Opaque','data':secret})
     labels={'app':APP}
@@ -109,6 +116,21 @@ def deploy():
           }],'volumes':[{'name':'code','configMap':{'name':code_name}},{'name':'vendor','configMap':{'name':vendor_name}}]}}}})
     apply(namespace,{'apiVersion':'v1','kind':'Service','metadata':{'name':APP,'labels':labels},
         'spec':{'selector':labels,'ports':[{'name':'http','port':80,'targetPort':8080}],'type':'ClusterIP'}})
+    # One CPU coordinator, never a model container. Recreate prevents concurrent
+    # workers from advancing the same durable S3 record during rollouts.
+    worker_labels={'app':APP+'-worker'}
+    apply(namespace,{'apiVersion':'apps/v1','kind':'Deployment',
+      'metadata':{'name':APP+'-worker','labels':worker_labels},
+      'spec':{'replicas':1,'strategy':{'type':'Recreate'},'selector':{'matchLabels':worker_labels},
+        'template':{'metadata':{'labels':worker_labels},'spec':{
+          'terminationGracePeriodSeconds':30,
+          'containers':[{'name':'worker','image':'python:3.12-slim','imagePullPolicy':'IfNotPresent',
+            'env':[{'name':k,'valueFrom':{'secretKeyRef':{'name':APP+'-vss-creds','key':k}}} for k in secret],
+            'workingDir':'/code',
+            'command':['sh','-c'],'args':['pip install --no-cache-dir -q -r requirements.txt && exec python -u processing.py'],
+            'resources':{'requests':{'cpu':'100m','memory':'128Mi'},'limits':{'cpu':'1','memory':'512Mi'}},
+            'volumeMounts':[{'name':'code','mountPath':'/code','readOnly':True},{'name':'scratch','mountPath':'/tmp'}]}],
+          'volumes':[{'name':'code','configMap':{'name':code_name}},{'name':'scratch','emptyDir':{'sizeLimit':'5Gi'}}]}}}})
     apply(namespace,{'apiVersion':'networking.k8s.io/v1','kind':'Ingress',
         'metadata':{'name':APP,'labels':labels,'annotations':{
             'nginx.ingress.kubernetes.io/rewrite-target':'/$2',
