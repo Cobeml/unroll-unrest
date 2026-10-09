@@ -5,17 +5,29 @@ import json
 import os
 from pathlib import Path,PurePosixPath
 import re
+import shlex
 from urllib.parse import quote,urlparse
 import requests
 from spatial import SceneStore,SpatialError,import_bundle,read_json,LIMIT
 from vss import VSS
 
 
-def token():
-    value=os.environ.get('RIDE_TOKEN')
-    if value:return value.strip()
+def token(env_file=None):
+    for key in ('RIDE_TOKEN','SERVICE_TOKEN'):
+        value=os.environ.get(key)
+        if value and value.strip():return value.strip()
     path=Path('/config/ride.token')
-    return path.read_text().strip() if path.is_file() else ''
+    if path.is_file():return path.read_text().strip()
+    path=Path(env_file) if env_file else Path(__file__).resolve().parents[2]/'.env'
+    values={}
+    if path.is_file():
+        for line in path.read_text().splitlines():
+            key,sep,value=line.strip().removeprefix('export ').partition('=')
+            if sep and key.strip() in {'RIDE_TOKEN','SERVICE_TOKEN'}:
+                try:parts=shlex.split(value,comments=True)
+                except ValueError:raise SpatialError('Invalid token entry in the environment file.') from None
+                if len(parts)==1:values[key.strip()]=parts[0]
+    return values.get('RIDE_TOKEN') or values.get('SERVICE_TOKEN') or ''
 
 
 def pull(base,destination,*,run_id=None,access_token=None,session=None):
@@ -40,6 +52,11 @@ def pull(base,destination,*,run_id=None,access_token=None,session=None):
     if not eligible:raise SpatialError('No completed map run available.',404)
     rid,entry=eligible[0];target=Path(destination)/rid;target.mkdir(parents=True,exist_ok=True);total=0;count=0
     for name,info in entry.get('files',{}).items():
+        # Upstream manifests use service-root paths; older exports used run-relative paths.
+        if name.startswith('runs/'):
+            prefix='runs/'+rid+'/'
+            if not name.startswith(prefix):raise SpatialError('Manifest asset belongs to another run.')
+            name=name[len(prefix):]
         path=PurePosixPath(name)
         if path.is_absolute() or '..' in path.parts or '\\' in name:raise SpatialError('Invalid manifest asset path.')
         # Explicitly exclude videos, logs, model files, geometry npz and service configuration.
