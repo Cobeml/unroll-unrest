@@ -80,5 +80,18 @@ class RideDemoTests(unittest.TestCase):
             self.assertEqual(client.get('/api/ride/video',headers={'Range':'bytes=0-1,4-5'}).status_code,416)
             self.assertEqual(client.get('/finding/crossing-2-right').status_code,200)
             self.assertEqual(client.get('/finding/not-a-finding').status_code,404)
+    def test_cosmos_receives_both_reviews_and_does_not_replace_structured_findings(self):
+        from main import app
+        from vss import Cache
+        import_bundle(self.run,self.store,bindings=self.bindings,vss=self.vss)
+        self.vss.cache=Cache();self.vss.request=lambda *a,**kw:{'answer':'Separate imported estimates from caption observations.'}
+        with patch('main.scenes',self.store),patch('main.vss',self.vss),patch.object(self.vss,'request',wraps=self.vss.request) as request,app.test_client() as client:
+            response=client.post('/api/ride/analysis');self.assertEqual(response.status_code,200)
+            sent=request.call_args.kwargs['data']
+            self.assertEqual(sent['original_video'],'s3://archive/'+PARENT_FILENAME)
+            self.assertIn('rejected',sent['question']);self.assertIn('confirmed',sent['question'])
+            self.assertIn('imported estimates',sent['system_prompt'])
+            client.post('/api/ride/analysis');self.assertEqual(request.call_count,1)
+            self.assertEqual(client.get('/api/ride').json['findings'][0]['title'],'Trim the hedge at crossing 1')
 
 if __name__=='__main__':unittest.main()

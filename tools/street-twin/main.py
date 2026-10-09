@@ -3,6 +3,7 @@ import os
 import re
 import requests
 import hashlib
+import json
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context, render_template_string
 from vss import VSS, UpstreamError
@@ -196,11 +197,13 @@ def ride_analysis():
     doc=demo_document(scenes,vss)
     row=vss.get_segment(doc['clips'][0]['id'])
     def analyze():
-        question='Describe the indexed ride and the crossing around 16–20 seconds. Explain a maintenance proposal to improve the crossing sightline. Separate video observations from these imported spatial estimates and vision-review results: '+str(doc['findings'])+'. Distances/speeds are uncalibrated estimates. The right-side hedge claim is supported by the imported frame review; the left-side spatial claim was rejected by that review. Do not infer a collision, legal violation, traffic delay or a measured risk reduction. Cite segment numbers and timestamps; mention uncertainty.'
-        result=vss.request('videos/synthesize',data={'original_video':row['original_video'],'question':question,'max_segments':6})
+        context={'findings':doc['findings'],'crossing_reviews':[{'object_id':o['id'],'side':e['side'],'review':e.get('review')} for o in doc['objects'] for e in o.get('ends',[]) if e.get('review')]}
+        question='Explain the crossing around 16–20 seconds and its maintenance proposal. Separate caption observations from this imported spatial/review JSON: '+json.dumps(context)+'. Distances and speeds are uncalibrated estimates. The right hedge claim is supported by imported frame review; the left spatial claim was rejected. Cite segment numbers and timestamps, and retain this disagreement.'
+        system_prompt='Answer the supplied question using the indexed segment captions and the imported context in the question. Write four concise sections: Observed video, Imported spatial evidence, Maintenance proposal, Limits. Label geometry, visibility percentages, speed and stopping distance as imported estimates. Attribute vision-review claims to the imported review, not your own direct observation. Never infer a collision, legal violation, traffic delay or measured safety benefit. Do not replace the question with a generic chronological ride summary.'
+        result=vss.request('videos/synthesize',data={'original_video':row['original_video'],'question':question,'system_prompt':system_prompt,'max_segments':6})
         return {'answer':result.get('answer') or result.get('llm_synthesis',{}).get('response') or 'No video synthesis returned.',
             'scope':'demo_parent_and_imported_spatial_context','scene_hash':doc['scene_hash'],'segment_ids':[c['id'] for c in doc['clips']]}
-    return jsonify(vss.cache.get(('ride-analysis',doc['scene_hash']),analyze,ttl=1800))
+    return jsonify(vss.cache.get(('ride-analysis-v2',doc['scene_hash']),analyze,ttl=1800))
 
 @app.get('/api/search')
 def search():

@@ -10,8 +10,8 @@ import sys
 ROOT=Path(__file__).parent
 APP='street-twin'
 FILES=['main.py','vss.py','service.py','observations.py','recommendations.py','spatial.py','bottlenecks.py','analysis.py',
-       'policy.py','spatial_reasoning.py','index.html','style.css','app.js','cockpit.js','requirements.txt']
-BINARY_FILES=['street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg']
+       'policy.py','spatial_reasoning.py','ride_demo.py','index.html','style.css','app.js','cockpit.js','ride.html','ride.css','ride.js','requirements.txt']
+BINARY_FILES=['street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg','ride-preview.jpg']
 
 def kubectl(namespace, *args, document=None):
     result=subprocess.run(['kubectl','-n',namespace,*args],

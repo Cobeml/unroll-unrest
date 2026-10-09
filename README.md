@@ -337,8 +337,8 @@ If it fails, or you need more help, run `/ask-cosmos`. The skill shares a snippe
 Everything the skills need is already in your environment. `config.example` in this repo
 lists every variable with a description.
 
-## StreetTwin app
+## Unfold — Crosswalk Sightlines
 
-StreetTwin shows existing street footage with YOLO object highlighting, an explicit pending 3D viewport, and policy recommendations that open their own pages with cited clips and scoped statistics. The default view uses first-person NYC cycling footage.
+Unfold recreates the UnfoldUnrest ride demo using the indexed `20261008_074640_GX050001_chunk_0000.mp4` video and its saved 3D street map. Playback synchronizes the rider, object boxes, crossing visibility and stopping-model strips. The crossing-2 hedge finding opens a maintenance proposal with statistics, paired frames and indexed clip citations. Archive YOLO and Cosmos analysis run through the existing VSS stack; the imported vision reviews retain both agreement and disagreement. The archive/search workflow remains under **Video archive**.
 
-Deploy with `bash tools/street-twin/deploy.sh`, then open [the workshop](https://workshop.thecosmoslabs.com) → **App**. See [the StreetTwin run guide and three-query demo](tools/street-twin/README.md) for setup, evidence semantics, corpus notes, and the future Spatial interface.
+Deploy with `bash tools/street-twin/deploy.sh`, then open [the workshop](https://workshop.thecosmoslabs.com) → **App**. See [the Unfold run guide and demo script](tools/street-twin/README.md) for setup, evidence semantics, corpus notes, and the future Spatial interface. The demo uses saved reconstruction outputs; live new-video processing is deferred.
