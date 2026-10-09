@@ -1,0 +1,11 @@
+StreetTwin spatial cockpit
+Adapted from exploring-curiosity/UnfoldUnrest, viewer/ride.html
+https://github.com/exploring-curiosity/UnfoldUnrest
+Revision: 7a3163c74785d3942603587da6456adf297a90cc
+Reused: cockpit composition, Three.js street surface, estimated object boxes,
+rider cone, camera choreography, minimap and sightline presentation.
+StreetTwin adds archive linkage, YOLO context and validated policy evidence.
+Upstream legal-distance verdicts and playback slowdown are not reused.
+
+Three.js 0.160.0 and OrbitControls are vendored under the MIT license.
+See vendor/THREE-LICENSE.txt. OrbitControls imports were changed to a local path.

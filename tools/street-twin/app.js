@@ -27,7 +27,7 @@ async function api(path,options={}){
  }finally{clearTimeout(timeout);options.signal?.removeEventListener('abort',onAbort);}
 }
 function choose(id,values,placeholder,selected=''){$(id).innerHTML=`<option value="">${esc(placeholder)}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(id==='location'?locationName(v):v)}</option>`).join('');$(id).value=values.includes(selected)?selected:'';}
-function filterParams(){const p=new URLSearchParams({view:'archive'});[['location','location'],['camera_id','camera'],['start','start'],['end','end']].forEach(([k,id])=>{if($(id).value)p.set(k,$(id).value);});if($('query').value.trim())p.set('query',$('query').value.trim());return p;}
+function filterParams(){const p=new URLSearchParams({view:'archive'});[['location','location'],['camera_id','camera'],['start','start'],['end','end']].forEach(([k,id])=>{if($(id).value)p.set(k,$(id).value);});if($('scene-select').value)p.set('scene_id',$('scene-select').value);if($('query').value.trim())p.set('query',$('query').value.trim());return p;}
 function policyURL(id){const href=url('policy/'+id);href.search=state.context;return href.href;}
 function renderWorkspace(data){
  state.clips=data.clips;state.recommendations=data.recommendations;state.policy=null;
@@ -102,7 +102,7 @@ function renderClipDetails(clip){
  $('clip-detail-content').innerHTML=`<p>${esc(clip.caption)}</p><p>${esc(locationName(clip.location))} · Indexed ${esc((clip.indexed_at||'').slice(0,10))}</p><code>${esc(clip.source)}</code>`;
 }
 async function selectClip(clip){
- const selection=++state.selection;state.selected=clip;state.detections=null;state.highlight='all';
+ const selection=++state.selection;state.selected=clip;state.detections=null;state.highlight='all';window.dispatchEvent(new CustomEvent('streettwin:clip',{detail:clip}));
  if(previews[clip.id])$('video').poster=url('assets/'+previews[clip.id]).href;
  else $('video').removeAttribute('poster');
  $('video-empty').hidden=true;$('video').src=apiURL('stream/'+clip.id);$('detection-status').textContent='LOADING OBJECTS';renderClipDetails(clip);renderObjects();
@@ -209,30 +209,7 @@ $('reason-button').addEventListener('click',async()=>{
  catch(e){$('reasoning').textContent=e.message;}
  finally{$('reason-button').disabled=false;}
 });
-// Empty viewer scaffold only. It contains no inferred street or object geometry.
-const orbit={yaw:.5,pitch:.6,distance:30,drag:null};
-function drawSpatial(){
- const canvas=$('spatial-canvas');if(!canvas.clientWidth)return;
- const w=canvas.clientWidth,h=canvas.clientHeight;
- canvas.setAttribute('viewBox',`0 0 ${w} ${h}`);const paths=[];
- function project(x,z){
-  const rx=x*Math.cos(orbit.yaw)-z*Math.sin(orbit.yaw),rz=x*Math.sin(orbit.yaw)+z*Math.cos(orbit.yaw);
-  const depth=orbit.distance+rz*Math.cos(orbit.pitch);if(depth<2)return null;
-  const f=Math.min(w,h)*.8;
-  return [w/2+rx*f/depth,h*.68+rz*Math.sin(orbit.pitch)*f/depth];
- }
-
- for(let n=-24;n<=24;n+=2){for(const line of [[[n,-24],[n,24]],[[-24,n],[24,n]]]){const a=project(...line[0]),b=project(...line[1]);if(a&&b){paths.push(`M${a[0]},${a[1]}L${b[0]},${b[1]}`);}}}
- canvas.innerHTML=`<path d="${paths.join(' ')}" fill="none" stroke="#64836160" stroke-width=".7"/>`;
-}
-$('spatial-canvas').addEventListener('pointerdown',e=>{orbit.drag={x:e.clientX,y:e.clientY};e.currentTarget.setPointerCapture(e.pointerId);});
-$('spatial-canvas').addEventListener('pointermove',e=>{if(!orbit.drag)return;orbit.yaw+=(e.clientX-orbit.drag.x)*.008;orbit.pitch=Math.max(.2,Math.min(1.3,orbit.pitch+(e.clientY-orbit.drag.y)*.006));orbit.drag={x:e.clientX,y:e.clientY};drawSpatial();});
-$('spatial-canvas').addEventListener('pointerup',()=>orbit.drag=null);
-$('spatial-canvas').addEventListener('pointercancel',()=>orbit.drag=null);
-$('spatial-canvas').addEventListener('wheel',e=>{e.preventDefault();orbit.distance=Math.max(16,Math.min(60,orbit.distance+e.deltaY*.03));drawSpatial();},{passive:false});
-$('spatial-canvas').addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','-'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')orbit.yaw-=.1;if(e.key==='ArrowRight')orbit.yaw+=.1;if(e.key==='ArrowUp')orbit.pitch=Math.min(1.3,orbit.pitch+.1);if(e.key==='ArrowDown')orbit.pitch=Math.max(.2,orbit.pitch-.1);if(e.key==='+')orbit.distance=Math.max(16,orbit.distance-2);if(e.key==='-')orbit.distance=Math.min(60,orbit.distance+2);drawSpatial();}});
-$('reset-orbit').addEventListener('click',()=>{orbit.yaw=.5;orbit.pitch=.6;orbit.distance=30;drawSpatial();});
-window.addEventListener('resize',()=>{drawSpatial();drawDetections();});
+window.addEventListener('resize',drawDetections);
 function frameLoop(){drawDetections();requestAnimationFrame(frameLoop);}requestAnimationFrame(frameLoop);
 async function start(){
  if(policyId){loadPolicy();return;}
@@ -242,8 +219,10 @@ async function start(){
   choose('location',state.metadata.location,'All locations',hasContext?(p.get('location')||(p.has('demo')?'new_york':'')):'new_york');
   choose('camera',state.metadata.camera_id,'All cameras',hasContext?(p.get('camera_id')||(p.has('demo')?'nyc_bike_gopro-1':'')):'nyc_bike_gopro-1');updateCameras();
   $('start').value=p.get('start')||'';$('end').value=p.get('end')||'';$('query').value=p.get('query')||'';
-  drawSpatial();await loadView(p.has('demo')?p:filterParams());
+  await loadView(p.has('demo')?p:filterParams());
  }catch(e){status(e.message,true);}
 }
+window.StreetTwin={api,url,state,selectClip,loadView,filterParams,policyId,esc};
+if(!policyId)import(url('assets/cockpit.js').href).catch(()=>{$('scene-link-state').textContent='Map viewer unavailable';});
 start();
 $('retry').addEventListener('click',()=>{status('Loading street footage…');if(policyId)loadPolicy();else if(state.metadata)loadView(state.context);else start();});

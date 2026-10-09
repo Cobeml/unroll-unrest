@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context, render_template_string
 from vss import VSS, UpstreamError
-from spatial import SPATIAL_INTERFACE
+from spatial import SPATIAL_INTERFACE, SceneStore, SpatialError
 from policy import policy_report
 from service import filters_from, sample, BadFilter, analytics, matches, demo
 from analysis import AnalysisManager, context_from
@@ -15,6 +15,7 @@ ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
 app.config['PUBLIC_PATH'] = os.environ.get('STREETTWIN_PUBLIC_PATH', '/')
 vss = VSS()
+scenes = SceneStore()
 analyses = AnalysisManager(vss)
 app.config['MAX_CONTENT_LENGTH'] = 8192
 
@@ -25,7 +26,7 @@ def app_shell():
     if not re.fullmatch(r'/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*', prefix) or any(p in {'.', '..'} for p in prefix.split('/')):
         prefix = app.config['PUBLIC_PATH']
     public_path = prefix.rstrip('/') + '/'
-    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css'])).hexdigest()[:12]
+    version = hashlib.sha256(b''.join((ROOT / name).read_bytes() for name in ['app.js','style.css','cockpit.js'])).hexdigest()[:12]
     response = Response(render_template_string((ROOT / 'index.html').read_text(), public_path=public_path, asset_version=version), mimetype='text/html')
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -90,7 +91,40 @@ def get_policy(review_id):
 
 @app.get('/api/spatial')
 def spatial_interface():
-    return jsonify(SPATIAL_INTERFACE)
+    return jsonify({**SPATIAL_INTERFACE,'connected':bool(scenes.index()['scenes'])})
+
+@app.errorhandler(SpatialError)
+def spatial_error(error):
+    return jsonify(error=str(error)),error.status
+
+@app.get('/api/spatial/scenes')
+def spatial_scenes():
+    return jsonify(scenes.index())
+
+@app.get('/api/spatial/scenes/<scene_id>')
+def spatial_scene(scene_id):
+    scene=scenes.scene(scene_id)
+    if scene['bindings']:
+        vss.archive()
+        from vss import normalize
+        scene['bindings']=[{**b,'clip':normalize(vss.get_segment(b['segment_id']),b['segment_id'])} for b in scene['bindings']]
+    return jsonify(scene)
+
+@app.get('/api/spatial/scenes/<scene_id>/assets/<asset_id>')
+def spatial_asset(scene_id,asset_id):
+    body,mime,checksum=scenes.asset(scene_id,asset_id)
+    response=Response(body,mimetype=mime)
+    response.set_etag(checksum)
+    response.headers['Cache-Control']='private, max-age=60'
+    return response.make_conditional(request)
+
+@app.get('/api/spatial/context')
+def spatial_context():
+    def time_arg(name):
+        try:return float(request.args[name]) if name in request.args else None
+        except ValueError:raise SpatialError('Invalid scene interval.') from None
+    return jsonify(scenes.context(request.args.get('scene_id',''),segment_id=request.args.get('segment_id'),
+        start=time_arg('start'),end=time_arg('end'),object_id=request.args.get('object_id')))
 
 @app.after_request
 def response_headers(response):
@@ -170,7 +204,9 @@ def policy_page(review_id):
 
 @app.get('/assets/<path:name>')
 def asset(name):
-    if name not in {'app.js', 'style.css', 'street-preview.jpg','bottleneck-preview.jpg'}:
+    if name in {'vendor/three.module.min.js','vendor/OrbitControls.js'}:
+        return send_from_directory(ROOT, name)
+    if name not in {'app.js', 'cockpit.js', 'style.css', 'street-preview.jpg','bottleneck-preview.jpg'}:
         return jsonify(error='Asset unavailable'), 404
     return send_from_directory(ROOT, name)
 
