@@ -188,7 +188,7 @@ def normalize(row, segment_id):
         classes = [v for v in classes.split(',') if v]
     return {
         'id':segment_id, 'source':row['source'],
-        'filename':row.get('filename') or row['source'].rsplit('/',1)[-1],
+        'filename':row['source'].rsplit('/',1)[-1],
         'original_video':row.get('original_video'),
         'segment_number':row.get('segment_number'),
         'start_sec':row.get('segment_start_sec',0), 'end_sec':row.get('segment_end_sec',0),

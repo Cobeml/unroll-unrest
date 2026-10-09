@@ -1,8 +1,9 @@
 """StreetTwin: a thin, same-origin interface to the indexed VSS archive."""
 import os
 from pathlib import Path
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from vss import VSS, UpstreamError
+from service import filters_from, sample, BadFilter
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
@@ -16,6 +17,15 @@ def upstream_error(error):
 @app.get("/api/metadata")
 def metadata():
     return jsonify(vss.metadata())
+
+@app.errorhandler(BadFilter)
+def bad_filter(error):
+    return jsonify(error=str(error)), 400
+
+@app.get('/api/analytics')
+def get_analytics():
+    filters = filters_from(request.args, vss.metadata())
+    return jsonify(sample(vss, filters))
 
 @app.get("/api/stats")
 def stats():
