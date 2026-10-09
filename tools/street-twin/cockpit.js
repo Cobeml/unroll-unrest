@@ -50,6 +50,7 @@ function describe(){
  if(!selected)return;
  $('object-title').textContent=selected.label;
  $('object-detail').textContent=`${selected.group==='vehicle'?selected.motion+' · ':''}${selected.t0.toFixed(1)}–${selected.t1.toFixed(1)}s · ${selected.seen} observations. ${selected.group==='crosswalk'?'Sightlines are imported estimates.':'Position and footprint are estimated.'}`;
+ if(selected.ends?.length){const end=selected.ends[0];const f=end.frames.reduce((b,f)=>Math.abs(f.time_sec-mapTime)<Math.abs((b?.time_sec??1e9)-mapTime)?f:b,null);if(f?.seen_fraction!=null)$('object-detail').textContent+=` ${end.side} watch area: ${Math.round(f.seen_fraction*100)}% in view (estimate).`;if(end.review)$('object-detail').textContent+=` Imported review: ${end.review.claim}.`;}
 }
 function pose(t){
  const P=D.path;let i=0;while(i<P.length-2&&P[i+1].t<t)i++;
@@ -95,19 +96,35 @@ async function build(data,token){
  const half=data.hfov/2*Math.PI/180,shape=new THREE.Shape();shape.moveTo(0,0);shape.absarc(0,0,14,-half,half,false);shape.lineTo(0,0);
  const cone=new THREE.Mesh(new THREE.ShapeGeometry(shape,24),new THREE.MeshBasicMaterial({color:'#f0c75a',transparent:true,opacity:.12,depthWrite:false}));cone.position.z=.05;rider.add(cone);scene.add(rider);
  const rays=new THREE.Group();scene.add(rays);
+ const watch=[];
  for(const o of data.objects.filter(o=>o.group==='crosswalk'))for(const a of o.approaches||[]){
   const positions=[],colors=[];
   for(const ray of a.rays||[]){positions.push(a.waiting[0],a.waiting[1],1,ray.to[0],ray.to[1],1.05);const c=new THREE.Color(ray.clear?'#f2f1ec':'#e45a48');colors.push(c.r,c.g,c.b,c.r,c.g,c.b);}
   if(!positions.length)continue;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
   const lines=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.55}));lines.userData.object=o;scene.add(lines);rays.add(lines);
  }
+ for(const o of data.objects)for(const end of o.ends||[]){
+  const sh=new THREE.Shape();end.area.forEach((p,i)=>i?sh.lineTo(p[0],p[1]):sh.moveTo(p[0],p[1]));
+  const box=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:1,bevelEnabled:false}),new THREE.MeshBasicMaterial({color:'#9aa0a3',transparent:true,opacity:.12,depthWrite:false}));
+  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),new THREE.LineBasicMaterial({color:'#9aa0a3',transparent:true,opacity:.8}));box.add(edges);scene.add(box);
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),new THREE.LineBasicMaterial({color:'#f0c75a',transparent:true,opacity:.8}));line.frustumCulled=false;scene.add(line);
+  watch.push({o,end,box,line,mid:[end.area.reduce((s,p)=>s+p[0],0)/4,end.area.reduce((s,p)=>s+p[1],0)/4]});
+ }
  const cloud=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({size:.07,vertexColors:true}));scene.add(cloud);
  const eye=new THREE.Vector3(),look=new THREE.Vector3(cx,cy,0);
  const resize=new ResizeObserver(()=>{const w=$('stage').clientWidth,h=$('stage').clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();});resize.observe($('stage'));
- engine={renderer,scene,cam,orbit,cloud,boxes,rays,rider,eye,look,resize,image,cx,cy};
+ engine={renderer,scene,cam,orbit,cloud,boxes,rays,rider,eye,look,resize,image,cx,cy,watch,viewData:null,viewTex:null,viewK:-1};
  const raycaster=new THREE.Raycaster();let down=null;
  renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
  renderer.domElement.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;const r=renderer.domElement.getBoundingClientRect();raycaster.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),cam);selected=raycaster.intersectObjects(boxes,false)[0]?.object.userData.object||null;describe();});
+ if(data.assets.visibility){
+  try{
+   const response=await fetch(url(data.assets.visibility.url));if(!response.ok)throw new Error();const bytes=new Uint8Array(await response.arrayBuffer());if(token!==loading)return;
+   const V=data.visibility,viewTex=new THREE.DataTexture(new Uint8Array(V.nx*V.ny*4),V.nx,V.ny,THREE.RGBAFormat);viewTex.magFilter=viewTex.minFilter=THREE.LinearFilter;
+   const layer=new THREE.Mesh(new THREE.PlaneGeometry(V.nx*V.res,V.ny*V.res),new THREE.MeshBasicMaterial({map:viewTex,transparent:true,depthWrite:false}));
+   layer.position.set(V.x0+V.nx*V.res/2,V.y0+V.ny*V.res/2,.015);layer.renderOrder=2;scene.add(layer);engine.viewData=bytes;engine.viewTex=viewTex;
+  }catch{$('scene-link-state').textContent='Visibility layer unavailable · street surface loaded';}
+ }
  if(data.assets.points){
   try{
    const buffers=await Promise.all(['points','colours'].map(async k=>{const r=await fetch(url(data.assets[k].url));if(!r.ok)throw new Error();return r.arrayBuffer();}));
@@ -140,6 +157,16 @@ function frame(now){
     if(view==='overview'){const span=Math.max(D.extent.x1-D.extent.x0,D.extent.y1-D.extent.y0,30);eye.set(e.cx-span*.4,e.cy-span*.7,span*.7);target.set(e.cx,e.cy,0);}
     else if(view==='director'){const o=selected||D.objects.find(o=>o.group==='crosswalk'&&Math.abs(o.t_pass-mapTime)<3.5);if(o){target.set(o.xy[0],o.xy[1],0);eye.set(o.xy[0]-15*fx-8*fy,o.xy[1]-15*fy+8*fx,18);}}
     const a=still?1:1-Math.exp(-dt*2.2);if(!e.eye.lengthSq())e.eye.copy(eye);e.eye.lerp(eye,a);e.look.lerp(target,a);e.cam.position.copy(e.eye);e.cam.lookAt(e.look);
+   }
+   for(const w of e.watch){
+    const on=selected?.id===w.o.id||Math.abs((w.o.t_pass??-100)-mapTime)<3.5;w.box.visible=on;w.line.visible=on;
+    if(!on)continue;const f=w.end.frames.reduce((best,f)=>Math.abs(f.time_sec-mapTime)<Math.abs((best?.time_sec??1e9)-mapTime)?f:best,null);
+    const shade=!w.end.covered||!f?.counted||f?.seen_fraction==null?'#9aa0a3':f.seen_fraction<.9?'#e45a48':'#63bd91';w.box.material.color.set(shade);
+    const positions=w.line.geometry.attributes.position;positions.setXYZ(0,r.x,r.y,D.cam_h);positions.setXYZ(1,w.mid[0],w.mid[1],1);positions.needsUpdate=true;
+   }
+   if(e.viewTex){
+    const V=D.visibility,n=V.nx*V.ny;let k=0;while(k<D.path.length-1&&D.path[k+1].t<=mapTime)k++;
+    if(k!==e.viewK){e.viewK=k;const px=e.viewTex.image.data,off=k*n;for(let i=0;i<n;i++){const value=e.viewData[off+i],j=i*4;px[j]=value===2?236:255;px[j+1]=value===2?40:236;px[j+2]=value===2?32:180;px[j+3]=value===2?160:value===1?80:0;}e.viewTex.needsUpdate=true;}
    }
    e.renderer.render(e.scene,e.cam);minimap();
   }

@@ -92,6 +92,27 @@ class SpatialTests(unittest.TestCase):
             for query in ['start=nan','end=99','start=7&end=2']:
                 self.assertEqual(c.get('/api/spatial/context?scene_id=test-run&'+query).status_code,400)
             self.assertEqual(c.post('/api/spatial/scenes',json={}).status_code,405)
+    def test_latest_visibility_export_and_imported_review_stay_descriptive(self):
+        self.raw['view']={'file':'view.bin','nx':2,'ny':2,'frames':2,'res':.5,'x0':0,'y0':0}
+        (self.run/'app/view.bin').write_bytes(bytes([0,1,2,0,0,2,1,0]))
+        self.raw['objects'].append({'id':2,'group':'crosswalk','seen':4,'xy':[8,0],
+            'rect':[[7,-2],[9,-2],[9,2],[7,2]],'t0':0,'t1':10,'t_pass':8,
+            'ends':[{'side':'right','area':[[7,-2],[9,-2],[9,-1],[7,-1]],'covered':True,
+                     'frames':[{'k':0,'seen':.4,'counted':True},{'k':1,'seen':.95,'counted':True}],
+                     'blockers':[{'id':1}],'evidence':'ortho.png',
+                     'review':{'claim':'rejected','reason':'The area is visible.','model':'test-model'}}]})
+        self.raw['stats']['duration']=9.99;self.write()
+        s=import_bundle(self.run,self.store)
+        self.assertEqual(s['duration'],10);self.assertEqual(s['visibility']['frames'],2)
+        context=self.store.context(s['id'],object_id='2')
+        observation=context['visibility_observations'][0]
+        self.assertEqual(observation['review']['claim'],'rejected')
+        self.assertEqual(observation['samples'][0]['seen_fraction'],.4)
+        self.assertFalse(context['facts'][0]['eligible_for_reasoning'])
+        self.assertNotIn('review',context['facts'][0])
+        (self.run/'app/view.bin').write_bytes(bytes([3]*8))
+        with self.assertRaises(SpatialError):import_bundle(self.run,self.store)
+
     def test_object_store_outage_is_not_an_empty_map_library(self):
         from botocore.exceptions import ClientError
         class Client:

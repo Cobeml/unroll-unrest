@@ -12,6 +12,7 @@ import time
 
 SCHEMA_VERSION=1
 UPSTREAM='7a3163c74785d3942603587da6456adf297a90cc'
+LATEST_EXPORT='98703a5'
 SAFE_ID=re.compile(r'^[a-zA-Z0-9_-]{1,80}$')
 LIMIT=96*1024*1024
 QUALITY={'scale':'estimated_from_assumed_camera_height','coordinates':'x_along_ride_y_left_z_up',
@@ -185,7 +186,12 @@ class SceneStore:
                 'scene_start_sec':max(start,o['t0']),'scene_end_sec':min(end,o['t1']),
                 'basis':'spatial_estimate','units':'estimated_metres','eligible_for_reasoning':bool(binding)})
         return {'scene_id':scene_id,'scene_hash':scene['hash'],'quality':scene['quality'],
-                'linked':bool(binding),'binding':binding,'facts':facts,'truncated':len(objects)==80}
+                'linked':bool(binding),'binding':binding,'facts':facts,'truncated':len(objects)==80,
+                'visibility_observations':[{'object_id':o['id'],'side':e['side'],'covered':e['covered'],
+                    'basis':'spatial_estimate','area':e['area'],'review':e.get('review'),
+                    'evidence_url':scene['assets'][e['evidence_asset']]['url'] if e.get('evidence_asset') else None,
+                    'samples':[f for f in e['frames'] if start<=f['time_sec']<=end][:100]}
+                    for o in objects for e in o.get('ends',[])]}
 
 
 def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
@@ -220,7 +226,8 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
     path=[{k:number(p[k]) for k in ['t','x','y','h']} for p in path]
     if path[0]['t']<0 or any(b['t']<=a['t'] for a,b in zip(path,path[1:])):raise SpatialError('Route timestamps must increase.')
     duration=number(raw.get('stats',{}).get('duration',path[-1]['t']))
-    if duration<=0 or duration<path[-1]['t'] or duration>3600:raise SpatialError('Invalid scene duration.')
+    if duration<=0 or duration<path[-1]['t']-.11 or duration>3600:raise SpatialError('Invalid scene duration.')
+    duration=max(duration,path[-1]['t'])
     raw_objects=raw.get('objects',[])
     if not isinstance(raw_objects,list) or len(raw_objects)>1000:raise SpatialError('Too many scene objects.')
     objects=[];known=set()
@@ -233,9 +240,12 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
         if group=='vehicle' and seen>=3 and passed>=4:
             if entry.get('parked') is True and spread<=1.6:motion='standing'
             elif entry.get('parked') is False and spread>1.6:motion='moving'
+        if seen<0 or spread<0:raise SpatialError('Invalid observation count or spread.')
         t0=number(entry.get('t0',0));t1=number(entry.get('t1',duration))
         if t0<0 or t1<t0 or t1>duration+.1:raise SpatialError('Invalid object observation interval.')
-        o={'id':oid,'group':group,'label':str(entry.get('label') or group)[:100],
+        label=str(entry.get('label') or group)[:100]
+        if group=='vehicle':label=re.sub(r'^(stopped|standing|parked|moving)\s+','',label,flags=re.I)
+        o={'id':oid,'group':group,'label':label,
             'seen':seen,'xy':vector(entry['xy']),'spread':spread,'motion':motion,'t0':t0,'t1':min(duration,t1)}
         footprint=entry.get('footprint') or entry.get('rect')
         if footprint:o['footprint']=poly(footprint)
@@ -248,7 +258,38 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
             rays=[{'to':vector(r['to']),'clear':r.get('clear') is True} for r in a.get('rays',[])[:200]]
             aps.append({'waiting':vector(a['waiting']),'covered':a.get('covered') is True,'rays':rays})
         if aps:o['approaches']=aps
+        ends=[]
+        for i,e in enumerate(entry.get('ends',[])[:4]):
+            side=str(e.get('side','unknown'))[:20]
+            end={'side':side,'area':poly(e['area']),'covered':e.get('covered') is True,
+                 'frames':[],'blocker_ids':[ident(str(b['id'])) for b in e.get('blockers',[])[:8]],
+                 'basis':'spatial_estimate'}
+            for f in e.get('frames',[])[:2000]:
+                k=int(number(f['k']))
+                if not 0<=k<len(path):raise SpatialError('Invalid visibility frame.')
+                seen=number(f['seen']) if f.get('seen') is not None else None
+                if seen is not None and not 0<=seen<=1:raise SpatialError('Invalid visibility fraction.')
+                end['frames'].append({'time_sec':path[k]['t'],'seen_fraction':seen,'counted':f.get('counted') is True})
+            if e.get('stop_t') is not None:end['stop_t']=number(e['stop_t'])
+            if e.get('evidence'):
+                aid='end_'+oid+'_'+str(i);asset(aid,e['evidence']);end['evidence_asset']=aid
+            review=e.get('review')
+            if isinstance(review,dict):
+                # Imported model review is provenance, never automatic policy admission.
+                end['review']={'claim':review.get('claim') if review.get('claim') in {'confirmed','rejected','unclear'} else 'unclear',
+                    'reason':str(review.get('reason',''))[:500],'model':str(review.get('model','unknown'))[:100],'basis':'imported_model_review'}
+            ends.append(end)
+        if ends:o['ends']=ends
         objects.append(o)
+    visibility=None
+    if raw.get('view'):
+        V=raw['view'];dims={k:int(number(V[k])) for k in ['nx','ny','frames']}
+        res=number(V['res'])
+        if any(v<1 for v in dims.values()) or dims['nx']*dims['ny']>300000 or dims['frames']!=len(path) or not 0<res<=10:
+            raise SpatialError('Invalid visibility grid.')
+        data=asset('visibility',V['file'])
+        if len(data)!=dims['nx']*dims['ny']*dims['frames'] or any(v>2 for v in data):raise SpatialError('Invalid visibility grid bytes.')
+        visibility={**dims,'res':res,'x0':number(V['x0']),'y0':number(V['y0']),'basis':'spatial_estimate'}
     normalized=[];manifest=bindings or {}
     if manifest:
         if not isinstance(manifest,dict) or not isinstance(manifest.get('bindings'),list) or not vss:raise SpatialError('Archive bindings need a manifest and VSS verification.')
@@ -272,6 +313,7 @@ def import_bundle(directory,store,*,scene_id=None,bindings=None,vss=None):
            'cam_h':number(raw.get('cam_h',1.1)),'hfov':number(raw.get('hfov',90)),
            'quality':QUALITY,'bindings':normalized,'assets':assets}
     if not 0<scene['cam_h']<10 or not 1<scene['hfov']<180:raise SpatialError('Invalid camera assumptions.')
+    if visibility:scene['visibility']=visibility
     scene['hash']=hashlib.sha256(json.dumps(scene,sort_keys=True,allow_nan=False).encode()).hexdigest()
     store.publish(scene,bodies)
     return scene

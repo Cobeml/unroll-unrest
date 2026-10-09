@@ -15,6 +15,10 @@ from unittest.mock import patch
 errors=[]
 temp=tempfile.TemporaryDirectory();root=Path(temp.name);run,raw=make_bundle(root)
 store=SceneStore(root/'store');store.bucket=None
+raw['view']={'file':'view.bin','nx':2,'ny':2,'frames':2,'res':.5,'x0':0,'y0':0}
+(run/'app/view.bin').write_bytes(bytes([0,1,2,0,0,2,1,0]))
+raw['objects'][0]['ends']=[{'side':'right','area':[[2,0],[3,0],[3,1],[2,1]],'covered':True,'frames':[{'k':0,'seen':.4,'counted':True},{'k':1,'seen':.95,'counted':True}]}]
+(run/'app/ride.json').write_text(json.dumps(raw))
 scene=import_bundle(run,store)
 app.config['PUBLIC_PATH']='/app/'
 from main import scenes as original_scenes
