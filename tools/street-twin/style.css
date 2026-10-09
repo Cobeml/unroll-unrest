@@ -92,7 +92,15 @@ main { max-width: 1800px; margin: auto; padding: 0 4%; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 17px; gap: 12px; }
 .section-heading h2 { font-size: 23px; font-weight: 400; letter-spacing: -.3px; margin: 0; }
 .section-heading span { color: var(--muted); font-size: 11px; letter-spacing: 1px; }
-.policy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; }
+.policy-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px; }
+.analysis-feedback { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; min-height: 22px; margin: -5px 0 15px; }
+.analysis-feedback .secondary { padding: 5px 10px; }
+.bottleneck-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.bottleneck-group:only-child { grid-column: 1 / -1; }
+.bottleneck-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 12px; font-size: 13px; }
+.bottleneck-heading .muted { font-size: 12px; }
+.evidence-jump { background: none; border: 0; color: var(--lime); padding: 3px 0; white-space: nowrap; font-size: 12px; }
+.demo-controls button.active { background: var(--text); color: var(--surface); border-color: var(--text); }
 .policy-card { border: 1px solid var(--line); background: var(--surface); border-radius: 2px; padding: 18px 18px 15px; min-height: 143px; display: flex; flex-direction: column; transition: border-color .15s, background .15s; }
 .policy-card:hover { border-color: #7a9573; background: #edf1e6; }
 .policy-card .category { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 1px; color: var(--teal); }
@@ -116,7 +124,15 @@ footer { max-width: 1800px; margin: auto; padding: 17px 4% 24px; color: var(--mu
 .report-section .proposal { font-size: 23px; line-height: 1.5; color: var(--text); letter-spacing: -.3px; }
 .citation-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 15px; }
 .citation-links a { border: 1px solid #b2c2a9; color: var(--lime); padding: 5px 9px; font-size: 13px; border-radius: 2px; }
-.detection-row { display: grid; grid-template-columns: 65px 1fr 30px; gap: 10px; align-items: center; margin: 14px 0; font-size: 14px; color: var(--muted); }
+.detection-row { display: grid; grid-template-columns: 65px 1fr 112px; gap: 10px; align-items: center; margin: 14px 0; font-size: 14px; color: var(--muted); }
+.detection-row > span:last-child { text-align: right; font-size: 12px; }
+.implementation-details { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.implementation-details summary { cursor: pointer; color: var(--lime); }
+.implementation-details h3 { font-weight: 400; color: var(--text); margin: 18px 0 4px; font-size: 16px; }
+.implementation-details ul { padding-left: 18px; }
+.claim-label { color: var(--teal); font-size: 11px; letter-spacing: .4px; }
+.cited-claim { margin: 15px 0; }
+.cited-claim blockquote { margin-top: 6px; }
 .detection-bar { background: #dce2d3; height: 6px; }
 .detection-bar span { display: block; background: var(--teal); height: 100%; }
 .report-section p.note { font-size: 13px; line-height: 1.7; color: var(--muted); }
@@ -143,6 +159,7 @@ footer { max-width: 1800px; margin: auto; padding: 17px 4% 24px; color: var(--mu
   select { max-width: 190px; }
   .visual-workspace { grid-template-columns: 1.4fr 1fr; gap: 15px; }
   .policy-grid { grid-template-columns: repeat(2, 1fr); }
+  .bottleneck-list { grid-template-columns: 1fr; }
   .report-grid { gap: 30px; }
   .spatial-message h2 { font-size: 19px; }
   .filter-drawer { flex-wrap: wrap; }
