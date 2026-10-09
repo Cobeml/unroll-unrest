@@ -39,6 +39,9 @@ def allowed_claims(clips):
 def parse_diagnosis(answer):
     if not isinstance(answer, str) or len(answer) > 24000:
         raise ValueError('Invalid diagnosis')
+    # Cosmos may prefix its answer with a reasoning channel marker. Discard only
+    # one complete leading think block; arbitrary prose or trailing content fails.
+    answer=re.sub(r'^\s*<think>.*?</think>\s*','',answer,count=1,flags=re.S)
     match = re.fullmatch(r'\s*```(?:json)?\s*\n?(.*?)\n?```\s*', answer, re.S)
     data = json.loads(match.group(1) if match else answer)
     if not isinstance(data, dict) or set(data) != {'findings'} or not isinstance(data['findings'], list) or len(data['findings']) > 3:

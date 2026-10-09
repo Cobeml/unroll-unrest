@@ -1,6 +1,7 @@
 """Bounded asynchronous retrieval → reasoning → evidence → intervention pipeline."""
 import hashlib
 import json
+import logging
 import secrets
 import threading
 import time
@@ -18,6 +19,7 @@ QUERIES = [
     'Truck and construction barrier narrow the street and obstruct passage',
     'Physical obstruction forces a cyclist or camera vehicle to divert around it',
 ]
+LOG=logging.getLogger(__name__)
 
 
 def context_from(args, metadata):
@@ -92,8 +94,9 @@ class AnalysisManager:
             data=self.analyze(context,lambda phase:self._update(job_id,phase=phase))
             self._update(job_id,status='complete',phase='Analysis complete',result=data,
                          warnings=data['warnings'],expires=self.clock()+self.ttl)
-        except Exception:
+        except Exception as error:
             # Never stringify upstream errors: URLs/headers can contain runtime secrets.
+            LOG.warning('Street analysis failed: %s',type(error).__name__)
             self._update(job_id,status='failed',phase='Analysis unavailable',expires=self.clock()+30)
 
     def analyze(self, context, progress=lambda phase:None):
@@ -137,11 +140,21 @@ class AnalysisManager:
             attempted+=1;progress(f'Reading sequence {attempted}')
             try:
                 # Synthesis consumes indexed captions, not a new ingest or raw video upload.
-                response=vss.request('videos/synthesize',data={'original_video':parent,'max_segments':6,
-                    'system_prompt':SYSTEM_PROMPT,
-                    'question':'Diagnose a local obstruction with an observed avoidance maneuver. Select only these allowed quotations: '+json.dumps(allowed)})
-                admitted=validate_findings(response.get('answer',''),rows)
-            except (UpstreamError,ValueError,TypeError):
+                for attempt in range(2):
+                    budget()
+                    response=vss.request('videos/synthesize',data={'original_video':parent,'max_segments':6,
+                        'system_prompt':SYSTEM_PROMPT,
+                        'question':('Diagnose a local obstruction with an observed avoidance maneuver. '
+                                    +('The prior response did not pass validation. Return the exact schema and unchanged allowed quotation objects. ' if attempt else '')
+                                    +'Select only these allowed quotations: '+json.dumps(allowed))})
+                    try:
+                        admitted=validate_findings(response.get('answer',''),rows)
+                        break
+                    except (ValueError,TypeError):
+                        LOG.warning('Sequence diagnosis rejected by evidence validator (attempt %s)',attempt+1)
+                        if attempt:raise
+            except (UpstreamError,ValueError,TypeError) as error:
+                LOG.warning('Sequence unavailable: %s',type(error).__name__)
                 failed+=1;warnings.append('A sequence could not produce a validated diagnosis.');continue
             events.extend(admitted)
         progress('Checking detections and citations')

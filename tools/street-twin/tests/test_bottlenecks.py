@@ -76,6 +76,13 @@ class DiagnosisTests(unittest.TestCase):
         p['findings'][0]['movement_effect'][0]['segment_number']=True
         with self.assertRaises(ValueError):validate_findings(json.dumps(p),fixture())
 
+    def test_cosmos_reasoning_prefix_is_removed_without_extracting_arbitrary_prose(self):
+        answer=json.dumps(proposal(fixture()))
+        for prefix in ['<think></think>\n','<think>Inspect the supplied evidence.</think>\n']:
+            self.assertEqual(len(validate_findings(prefix+'```json\n'+answer+'\n```',fixture())),1)
+        for text in ['Unrelated prose '+answer,'<think>unclosed '+answer,answer+' trailing prose']:
+            with self.assertRaises(ValueError):validate_findings(text,fixture())
+
 
 class InterventionTests(unittest.TestCase):
     def test_paired_actions_and_tampering(self):

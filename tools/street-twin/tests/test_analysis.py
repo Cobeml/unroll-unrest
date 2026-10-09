@@ -63,6 +63,14 @@ class AnalysisTests(unittest.TestCase):
         archive=Archive();archive.fail=True
         with self.assertRaises(UpstreamError):self.manager(archive).analyze({'demo':'bottleneck'})
 
+    def test_one_invalid_response_retries_but_two_fail_closed(self):
+        archive=Archive();manager=self.manager(archive)
+        with patch.object(archive,'request',side_effect=[{'answer':'bad JSON'},{'answer':json.dumps(proposal(archive.clips))}]) as request:
+            self.assertEqual(len(manager.analyze({'demo':'bottleneck'})['recommendations']),2)
+            self.assertEqual(request.call_count,2)
+        with patch.object(archive,'request',return_value={'answer':'{"findings":[{"action":"Fine the driver"}]}'}):
+            with self.assertRaises(UpstreamError):manager.analyze({'demo':'bottleneck'})
+
     def test_deduplication_expiry_failure_retry_and_no_detection_payload(self):
         now=[10];manager=self.manager(clock=lambda:now[0],ttl=30)
         manager._run=lambda job_id:None
