@@ -92,6 +92,15 @@ class SpatialTests(unittest.TestCase):
             for query in ['start=nan','end=99','start=7&end=2']:
                 self.assertEqual(c.get('/api/spatial/context?scene_id=test-run&'+query).status_code,400)
             self.assertEqual(c.post('/api/spatial/scenes',json={}).status_code,405)
+    def test_object_store_outage_is_not_an_empty_map_library(self):
+        from botocore.exceptions import ClientError
+        class Client:
+            def get_object(self,**kwargs):raise ClientError({'Error':{'Code':'AccessDenied'}},'GetObject')
+        store=SceneStore(bucket='team-1-vss-db',prefix='street-twin/spatial/',client=Client())
+        with self.assertRaises(SpatialError) as error:store.index()
+        self.assertEqual(error.exception.status,503)
+        with self.assertRaises(SpatialError):SceneStore(bucket='team-1-vss-db',prefix='')
+
     def test_ingestion_bucket_is_rejected(self):
         with self.assertRaises(SpatialError):SceneStore(bucket='team-1-vss-chunks')
 

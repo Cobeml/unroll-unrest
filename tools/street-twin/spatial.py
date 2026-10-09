@@ -104,13 +104,18 @@ class SceneStore:
         if self.bucket:
             try:
                 response=self.client.get_object(Bucket=self.bucket,Key=self.prefix+key)
-                if response['ContentLength']>LIMIT:raise SpatialError('Map file exceeds size limit.')
-                return response['Body'].read()
+                try:
+                    if response['ContentLength']>LIMIT:raise SpatialError('Map file exceeds size limit.')
+                    return response['Body'].read()
+                finally:response['Body'].close()
             except SpatialError:raise
-            except Exception:raise SpatialError('Saved map unavailable.',404) from None
+            except Exception as error:
+                code=getattr(error,'response',{}).get('Error',{}).get('Code')
+                raise SpatialError('Saved map unavailable.',404 if code in {'404','NoSuchKey','NotFound'} else 503) from None
         path=self.root/key
         if not path.is_file():raise SpatialError('Saved map unavailable.',404)
-        return path.read_bytes()
+        try:return path.read_bytes()
+        except OSError:raise SpatialError('Map storage unavailable.',503) from None
 
     def put(self,key,data,mime):
         if self.bucket:
@@ -127,6 +132,7 @@ class SceneStore:
             except SpatialError as e:
                 if e.status!=404:raise
                 data={'schema_version':SCHEMA_VERSION,'scenes':[]}
+            except (ValueError,UnicodeError):raise SpatialError('Invalid scene index.',503) from None
             if not isinstance(data,dict) or not isinstance(data.get('scenes'),list):raise SpatialError('Invalid scene index.',503)
             self._cache=data;self._at=time.monotonic();return data
 

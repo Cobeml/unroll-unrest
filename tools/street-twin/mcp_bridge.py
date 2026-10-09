@@ -100,9 +100,10 @@ def get_analytics(location:str='',camera_id:str='',start:str='',end:str='')->dic
 
 
 @mcp.tool(annotations=READ)
-def get_recommendations(location:str='',camera_id:str='',scene_id:str='',demo:str='')->dict[str,Any]:
+def get_recommendations(location:str='',camera_id:str='',scene_id:str='',demo:str='',query:str='',start:str='',end:str='')->dict[str,Any]:
     """Read/reuse grounded analysis. May return a background job; this never writes to the archive."""
-    p=scope(location,camera_id,scene_id=scene_id)
+    p=scope(location,camera_id,start,end,scene_id)
+    if query:p['query']=query
     if demo:p['demo']=demo
     return api('recommendations',p)
 
@@ -115,10 +116,11 @@ def get_analysis_status(job_id:str)->dict[str,Any]:
 
 
 @mcp.tool(annotations=READ)
-def get_policy_report(policy_id:str,location:str='',camera_id:str='',scene_id:str='',demo:str='')->dict[str,Any]:
+def get_policy_report(policy_id:str,location:str='',camera_id:str='',scene_id:str='',demo:str='',query:str='',start:str='',end:str='')->dict[str,Any]:
     """Read a recommendation's clips, statistics, limitations and selected spatial facts in its original scope."""
     if not re.fullmatch('[a-f0-9]{16}',policy_id):raise ValueError('Choose an existing policy ID.')
-    p=scope(location,camera_id,scene_id=scene_id)
+    p=scope(location,camera_id,start,end,scene_id)
+    if query:p['query']=query
     if demo:p['demo']=demo
     return api('policy/'+policy_id,p)
 
