@@ -4,7 +4,8 @@ import re
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory, request, Response, stream_with_context
 from vss import VSS, UpstreamError
-from service import filters_from, sample, BadFilter, analytics, matches
+from spatial import SPATIAL_INTERFACE
+from service import filters_from, sample, BadFilter, analytics, matches, demo
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=None)
@@ -27,6 +28,27 @@ def bad_filter(error):
 def get_analytics():
     filters = filters_from(request.args, vss.metadata())
     return jsonify(sample(vss, filters))
+
+@app.get('/api/demo/<name>')
+def get_demo(name):
+    return jsonify(demo(vss,name))
+
+@app.get('/api/recommendations')
+def get_recommendations():
+    filters=filters_from(request.args,vss.metadata())
+    return jsonify(recommendations=sample(vss,filters)['recommendations'])
+
+@app.get('/api/spatial')
+def spatial_interface():
+    return jsonify(SPATIAL_INTERFACE)
+
+@app.after_request
+def response_headers(response):
+    response.headers['X-Content-Type-Options']='nosniff'
+    response.headers['Referrer-Policy']='same-origin'
+    if request.path.startswith('/api/') and not request.path.startswith('/api/stream/'):
+        response.headers['Cache-Control']='no-store'
+    return response
 
 def segment_id(value):
     if not re.fullmatch(r'[a-f0-9]{20}', value):

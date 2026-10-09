@@ -2,6 +2,7 @@
 from collections import Counter, defaultdict
 from datetime import date
 from observations import observations, LABELS
+from recommendations import build_recommendations
 
 # Match discovered filenames, never construct deployment-specific S3 paths.
 DEMO_ANCHORS = {
@@ -96,6 +97,20 @@ def analytics(clips, *, available_clips=None, available_cameras=None, filters=No
         'camera_count':len({c['camera_id'] for c in clips}),
         'object_chart':[{'label':k,'clip_count':classes[k]} for k in relevant if classes[k]],
         'conditions':[{'type':k,'label':LABELS[k],'clip_count':conditions[k]} for k in LABELS],
-        'filters':filters, 'recommendations':[],
+        'filters':filters, 'recommendations':build_recommendations(clips),
         'sampling_note':'Up to 96 segments from selected parent videos; this is an archive sample.',
     }
+
+
+def demo(vss, name):
+    if name not in DEMO_ANCHORS:
+        raise BadFilter('Choose an existing demo preset.')
+    filename,query=DEMO_ANCHORS[name]
+    for chunk in vss.archive():
+        for row in chunk.get('timeline',[]):
+            if row.get('source','').rsplit('/',1)[-1]==filename:
+                clip=vss.register({**{k:v for k,v in chunk.items() if k!='timeline'},**row})
+                result=analytics([clip],available_clips=1,available_cameras=1)
+                result['demo']={'name':name,'query':query,'verified_anchor':True}
+                return result
+    raise BadFilter('This preset is no longer present in the indexed archive.')

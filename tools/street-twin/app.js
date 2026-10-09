@@ -32,7 +32,7 @@ function populateSelect(id, values, defaultText, chosen='') {
   $(id).value=values.includes(chosen)?chosen:'';
 }
 function renderAnalytics(data) {
-  state.clips=data.clips;state.recommendations=data.recommendations;
+  state.clips=data.clips;state.recommendations=data.recommendations;state.activeRecommendation=null;
   renderEvidenceList();
   $('sample-label').textContent=`${data.sample_count} SAMPLED / ${data.available_clips ?? '—'} AVAILABLE CLIPS`;
   $('metrics').innerHTML=[[data.sample_count,'Sampled clips'],[data.recommendations.length,'Planning reviews'],[data.camera_count,'Cameras sampled']].map(([n,label])=>`<div><strong>${n}</strong><span>${label}</span></div>`).join('');
@@ -40,7 +40,7 @@ function renderAnalytics(data) {
   $('object-chart').innerHTML=data.object_chart.length?data.object_chart.map(x=>`<div class="bar-row"><span>${escapeHTML(x.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${x.clip_count/max*100}%"></div></div><span class="count">${x.clip_count}</span></div>`).join(''):'<p class="muted">No detections in this sample.</p>';
   $('condition-chart').innerHTML=data.conditions.map(x=>`<span class="condition"><i></i>${escapeHTML(x.label)} <b>${x.clip_count}</b></span>`).join('');
   $('review-count').textContent='CAPTION-SUPPORTED OBSERVATIONS';
-  $('recommendations').innerHTML='<p class="muted">Select Evidence / Clips to explore the sampled observations. Structured planning reviews are the next slice.</p>';
+  renderRecommendations();
   const hero=data.clips.find(c=>c.filename.includes('GOPR0130_chunk_0004_segment_005')) || data.clips[0];
   if(hero) {
     state.hero=hero;
@@ -88,9 +88,15 @@ function clipTitle(clip) {
   return first.length>145?first.slice(0,142)+'…':first;
 }
 function tagsHTML(clip) {
-  return (clip.observation_tags||[]).map(t=>`<span>${escapeHTML(t)}</span>`).join('');
+  const reviews=state.recommendations.filter(r=>r.segment_refs.some(ref=>ref.segment_id===clip.id));
+  const labels=reviews.length?reviews.map(r=>r.label):(clip.observation_tags||[]);
+  return [...new Set(labels)].map(t=>`<span>${escapeHTML(t)}</span>`).join('');
 }
-function renderEvidenceList(clips=state.clips) {
+function renderEvidenceList(clips=null) {
+  if(clips===null) {
+    const ids=state.activeRecommendation?.segment_refs.map(r=>r.segment_id);
+    clips=ids?state.clips.filter(c=>ids.includes(c.id)):state.clips;
+  }
   $('evidence-count').textContent=`${clips.length} RECORDED SEGMENTS`;
   $('clip-list').innerHTML=clips.length?clips.map(c=>`<button class="evidence-card ${state.selected===c.id?'selected':''}" data-clip="${c.id}"><div class="meta"><span>${escapeHTML(locationName(c.location))}</span><span>${time(c.start_sec)}–${time(c.end_sec)}</span></div><h4>${escapeHTML(clipTitle(c))}</h4><div class="meta"><span>${escapeHTML(c.camera_id)}</span><span>SEG ${c.segment_number}</span></div><div class="tags">${tagsHTML(c)}</div></button>`).join(''):'<p class="muted">No matching clips. Adjust the filters or description.</p>';
   $('clip-list').querySelectorAll('[data-clip]').forEach(b=>b.addEventListener('click',()=>selectClip(b.dataset.clip)));
@@ -122,7 +128,7 @@ function renderPlayer(clip) {
   state.selectedClip=clip;
   $('player-title').textContent=clipTitle(clip);
   $('player-timing').textContent=`Parent ${time(clip.start_sec)}–${time(clip.end_sec)} · ${clip.duration}s clip`;
-  $('player-tags').innerHTML=tagsHTML(clip);
+  $('player-tags').innerHTML=tagsHTML(clip)+(state.activeRecommendation?`<span>REVIEW ${escapeHTML(state.activeRecommendation.id.slice(0,6))}</span>`:'');
   $('player-details').innerHTML=[['CAMERA',clip.camera_id],['LOCATION',locationName(clip.location)],['INDEXED AT',(clip.indexed_at||'Unknown').replace('T',' ').slice(0,19)],['SEGMENT',clip.segment_number]].map(([k,v])=>`<div><span>${k}</span>${escapeHTML(v)}</div>`).join('')+`<div class="segment-id"><span>SEGMENT ID / SOURCE</span>${escapeHTML(clip.source)}</div>`;
   $('player-caption').textContent=clip.caption;
 }
@@ -179,10 +185,34 @@ $('search-form').addEventListener('submit',async event=>{
   }catch(error){if(generation===state.generation)status(error.message,true);}
 });
 function clearPlayer() {
-  ++selectionGeneration;state.selected=null;state.detection=null;state.selectedClip=null;
+  ++selectionGeneration;state.activeRecommendation=null;state.selected=null;state.detection=null;state.selectedClip=null;
   $('evidence-video').removeAttribute('src');$('evidence-video').load();
   $('player-title').textContent='No segment selected';$('player-timing').textContent='';
   ['player-tags','player-details','player-caption','detection-summary','reasoning'].forEach(id=>$(id).textContent='');
 }
 $('reset-search').addEventListener('click',()=>{$('query').value='';clearPlayer();loadAnalytics();});
+function renderRecommendations() {
+  const recommendations=state.recommendations;
+  $('review-count').textContent=`${recommendations.length} CAPTION-SUPPORTED REVIEWS`;
+  $('recommendations').innerHTML=recommendations.length?recommendations.map(r=>`<button class="recommendation" data-review="${r.id}"><div class="card-top"><span>${escapeHTML(r.label.toUpperCase())}</span><span class="severity">${escapeHTML(r.severity.toUpperCase())}</span></div><h3>${escapeHTML(r.title)}</h3><p>${escapeHTML(r.observation)}</p><p class="action">${escapeHTML(r.action)}</p><div class="card-bottom"><span>${escapeHTML(locationName(r.location))} · ${r.metrics.evidence_clips} clips</span><span>View evidence ↗</span></div></button>`).join(''):'<p class="muted">No supported planning reviews in this sample. Routine activity remains available in Evidence / Clips.</p>';
+  $('recommendations').querySelectorAll('[data-review]').forEach(b=>b.addEventListener('click',()=>{
+    state.activeRecommendation=state.recommendations.find(r=>r.id===b.dataset.review);
+    showTab('evidence');renderEvidenceList();
+    selectClip(state.activeRecommendation.segment_refs[0].segment_id);
+    status(`${state.activeRecommendation.title} ${state.activeRecommendation.metrics.evidence_clips} referenced clips.`);
+  }));
+}
+document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',async()=>{
+  const generation=++state.generation;
+  status('Opening a verified archive example…');
+  try {
+    const data=await api('demo/'+button.dataset.demo);
+    if(generation!==state.generation)return;
+    $('location').value='new_york';$('camera').value='nyc_bike_gopro-1';
+    $('start-date').value='';$('end-date').value='';$('query').value=data.demo.query;
+    clearPlayer();renderAnalytics(data);showTab('evidence');
+    await selectClip(data.clips[0].id);
+    status(`Verified archive example · ${data.demo.query}`);
+  }catch(error){if(generation===state.generation)status(error.message,true);}
+}));
 start();
