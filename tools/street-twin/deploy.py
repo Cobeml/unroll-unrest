@@ -10,8 +10,8 @@ import sys
 ROOT=Path(__file__).parent
 APP='street-twin'
 FILES=['main.py','vss.py','service.py','observations.py','recommendations.py','spatial.py','bottlenecks.py','analysis.py',
-       'policy.py','index.html','style.css','app.js','requirements.txt']
-BINARY_FILES=['street-preview.jpg','bottleneck-preview.jpg']
+       'policy.py','spatial_reasoning.py','index.html','style.css','app.js','cockpit.js','requirements.txt']
+BINARY_FILES=['street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg']
 
 def kubectl(namespace, *args, document=None):
     result=subprocess.run(['kubectl','-n',namespace,*args],
@@ -23,7 +23,8 @@ def kubectl(namespace, *args, document=None):
     return result.stdout
 
 def apply(namespace, document):
-    kubectl(namespace,'apply','-f','-',document=document)
+    args=['apply','--server-side','--field-manager=street-twin'] if document['kind']=='ConfigMap' else ['apply']
+    kubectl(namespace,*args,'-f','-',document=document)
     print(document['kind']+' applied: '+document['metadata']['name'],flush=True)
 
 def deploy():
@@ -59,10 +60,36 @@ def deploy():
     binary={name:base64.b64encode((ROOT/name).read_bytes()).decode() for name in BINARY_FILES}
     if sum(len(v.encode()) for v in code.values())+sum(len(v) for v in binary.values())>900_000:
         raise RuntimeError('App code exceeds the deployment size budget.')
-    apply(namespace,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':APP+'-code'},'data':code,'binaryData':binary})
+    # Vendored browser modules have their own ConfigMap; no CDN dependency at runtime.
+    checksums=json.loads((ROOT/'vendor/checksums.json').read_text())
+    import hashlib
+    vendor={name:(ROOT/'vendor'/name).read_text() for name in checksums}
+    if any(hashlib.sha256(vendor[name].encode()).hexdigest()!=checksums[name] for name in vendor):
+        raise RuntimeError('Vendored browser module checksum mismatch.')
+    if sum(len(v.encode()) for v in vendor.values())>900_000:
+        raise RuntimeError('Browser modules exceed the deployment size budget.')
+    # Derived maps use an app-only asset prefix; no ingestion buckets or video uploads.
+    from spatial import SceneStore
+    bucket=os.environ.get('STREETTWIN_SPATIAL_BUCKET') or os.environ['VASTDB_BUCKET']
+    prefix='' if bucket.endswith('-street-twin-spatial') else 'street-twin/spatial/'
+    os.environ['STREETTWIN_SPATIAL_PREFIX']=prefix
+    # The workshop S3 VIP uses a private certificate, matching the SDK skill pattern.
+    os.environ.setdefault('STREETTWIN_S3_VERIFY','false')
+    try:
+        store=SceneStore(bucket=bucket,prefix=prefix);store.ensure_bucket()
+        if not store.index()['scenes']:store.put('index.json',json.dumps({'schema_version':1,'scenes':[]}).encode(),'application/json')
+    except Exception:raise RuntimeError('Dedicated map storage could not be configured.') from None
+    code_name=APP+'-code-'+hashlib.sha256(json.dumps([code,binary],sort_keys=True).encode()).hexdigest()[:10]
+    vendor_name=APP+'-vendor-'+hashlib.sha256(json.dumps(vendor,sort_keys=True).encode()).hexdigest()[:10]
+    apply(namespace,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':code_name},'data':code,'binaryData':binary})
+    apply(namespace,{'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':vendor_name},'data':vendor})
     # Use data rather than stringData so apply remains idempotent; no secret file is written.
     runtime={k:os.environ[k] for k in ['VSS_URL','VSS_USERNAME','VSS_PASSWORD']}
     runtime['VSS_URL']=vss_url
+    runtime.update({k:os.environ[k] for k in ['S3_ENDPOINT','ACCESS_KEY','SECRET_KEY']})
+    runtime['STREETTWIN_SPATIAL_BUCKET']=bucket
+    runtime['STREETTWIN_SPATIAL_PREFIX']=prefix
+    runtime['STREETTWIN_S3_VERIFY']=os.environ['STREETTWIN_S3_VERIFY']
     secret={k:base64.b64encode(v.encode()).decode() for k,v in runtime.items()}
     apply(namespace,{'apiVersion':'v1','kind':'Secret','metadata':{'name':APP+'-vss-creds'},'type':'Opaque','data':secret})
     labels={'app':APP}
@@ -73,13 +100,13 @@ def deploy():
             'ports':[{'containerPort':8080}],
             'env':[{'name':k,'valueFrom':{'secretKeyRef':{'name':APP+'-vss-creds','key':k}}} for k in secret]+[
                 {'name':'STREETTWIN_PUBLIC_PATH','value':'/app/'}],
-            'workingDir':'/code','volumeMounts':[{'name':'code','mountPath':'/code','readOnly':True}],
+            'workingDir':'/code','volumeMounts':[{'name':'code','mountPath':'/code','readOnly':True},{'name':'vendor','mountPath':'/code/vendor','readOnly':True}],
             'command':['sh','-c'],
             'args':['pip install --no-cache-dir -q -r requirements.txt && exec gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 180 main:app'],
             'resources':{'requests':{'cpu':'100m','memory':'128Mi'},'limits':{'cpu':'1','memory':'512Mi'}},
             'readinessProbe':{'httpGet':{'path':'/health','port':8080},'initialDelaySeconds':5,'periodSeconds':5},
             'livenessProbe':{'httpGet':{'path':'/health','port':8080},'initialDelaySeconds':45,'periodSeconds':15},
-          }],'volumes':[{'name':'code','configMap':{'name':APP+'-code'}}]}}}})
+          }],'volumes':[{'name':'code','configMap':{'name':code_name}},{'name':'vendor','configMap':{'name':vendor_name}}]}}}})
     apply(namespace,{'apiVersion':'v1','kind':'Service','metadata':{'name':APP,'labels':labels},
         'spec':{'selector':labels,'ports':[{'name':'http','port':80,'targetPort':8080}],'type':'ClusterIP'}})
     apply(namespace,{'apiVersion':'networking.k8s.io/v1','kind':'Ingress',

@@ -1,6 +1,6 @@
 # StreetTwin
 
-Street bottlenecks, object detections, and paired policy/infrastructure recommendations grounded in indexed video evidence. Off-white, serif, video-first web interface; reconstruction remains deferred.
+Street bottlenecks, object detections, and paired policy/infrastructure recommendations grounded in indexed video evidence. A serif, off-white shell around an immersive 3D street cockpit, with archive video, YOLO overlays and cited reports. Reconstruction runs on the teammate’s machine; StreetTwin imports its saved outputs.
 
 ## Run and deploy
 
@@ -8,15 +8,18 @@ The deliverable runs on the team Kubernetes cluster at `/app`. Credentials and k
 
 ```bash
 cd ~/vast-builders-challenge
+python3 -m venv .venv  # only if the repository venv does not already exist
+.venv/bin/python -m pip install -r tools/street-twin/mcp-requirements.txt
 bash tools/street-twin/deploy.sh
 ```
 
-Open [the workshop](https://workshop.thecosmoslabs.com) → **App** after rollout. The deployment uses a public Python image, code ConfigMap, runtime Secret, and the existing team's Ingress. It discovers the existing `/api` Service for backend calls. Updates restart StreetTwin; another app's `/app` route is never overwritten. No Docker build, registry or DataEngine changes are required.
+Open [the workshop](https://workshop.thecosmoslabs.com) → **App** after rollout. The deployment uses a public Python image, versioned code and browser-module ConfigMaps, runtime Secret, and the existing team's Ingress. It discovers the existing `/api` Service for backend calls. Updates restart StreetTwin; another app's `/app` route is never overwritten. No Docker build, registry or DataEngine changes are required.
 
 For development verification, install `requirements.txt` in a Python virtual environment, supply runtime `VSS_URL`, `VSS_USERNAME`, and `VSS_PASSWORD` without writing them into the repository, and run:
 
 ```bash
 gunicorn --chdir tools/street-twin --workers 1 --threads 8 --timeout 180 main:app
+python -m pip install -r tools/street-twin/mcp-requirements.txt
 python -m unittest discover -s tools/street-twin/tests -v
 ```
 
@@ -39,6 +42,18 @@ The presets resolve filenames in the live indexed archive, independent of search
 Primary segment ID: `7d023dd390c2a7baac0f`. Truck maneuver ID: `3abeb5fe5ebffa78b989`. Camera: `nyc_bike_gopro-1`; location: `new_york`. Seconds are parent-relative, not recording clock times.
 
 Select Nashville / I-24 to show a negative case: normal traffic produces no bottleneck recommendation. Neighborhood / Pack D parking alone also does not qualify. Crossing and queue archive presets remain available through `/api/demo/crossing` and `/api/demo/queue`; feature presence or red-light queues alone do not establish actionable bottlenecks.
+
+## Three reliable archive queries
+
+Scope these to New York / `nyc_bike_gopro-1`. Semantic ranking can vary; the corresponding preset always opens the verified archive anchor.
+
+| Query | Preset / evidence | Demonstration |
+| --- | --- | --- |
+| Parked red sedan obstructs the riding path; rider maneuvers around it | **Blocked passage** · `7d023dd390c2a7baac0f`, 15–20s | Policy: keep the riding path clear; infrastructure: evaluate protected passage |
+| Delivery trucks partially blocking the street while cycling | **Truck & barrier** · neighboring clips from `GOPR0130_chunk_0004` | Coordinate loading/barriers and evaluate a continuous bypass |
+| Cyclist weaving between vehicles in slow city traffic | **Cycling in traffic** · `ef7c083c57cb1601f04f`, 5–10s | Clip retrieval and real YOLO context; a crash or qualifying obstruction is not established |
+
+The third clip was inspected at 0, 2 and 4 seconds of playback. It shows close passage between vehicles; no collision was visible in those sampled frames. “Biker close call”/“crash” search results did not establish a crash, so the UI does not label this clip as one or manufacture a recommendation. `traffic-preview.jpg` is a derived first-frame image tied only to this segment.
 
 ## How recommendations are generated
 
@@ -64,7 +79,7 @@ Recommendation JSON retains `id`, `type`, `severity`, `metrics`, and `segment_re
 
 Jobs deduplicate by scope and pipeline version, use two background workers, allow at most eight active jobs and 32 retained jobs, and expire completed results after 30 minutes. Failed jobs can be retried. Analysis checks a five-minute budget between upstream calls; an in-flight request can run until its upstream timeout. Polling stops when the user changes views. Failed analysis preserves playable footage and offers a separate retry. Pod restarts discard caches and jobs; report links regenerate from their scope.
 
-Other routes: `/api/metadata`, `/api/stats`, `/api/evidence/<id>`, `/api/detections/<id>`, `/api/stream/<id>`, `/api/demo/{bottleneck,passage,crossing,queue}`, `/api/spatial`, `/health`, and `POST /api/reason/<id>`. Server-side JWT refresh and Range streaming keep credentials out of the browser. No derived VastDB storage is needed.
+Other routes: `/api/metadata`, `/api/stats`, `/api/evidence/<id>`, `/api/detections/<id>`, `/api/stream/<id>`, `/api/demo/{bottleneck,passage,traffic,crossing,queue}`, `/api/spatial`, `/health`, and `POST /api/reason/<id>`. Server-side JWT refresh and Range streaming keep credentials out of the browser. No derived VastDB storage is needed.
 
 ## Loading and diagnostics
 
@@ -74,39 +89,100 @@ Video plays on explicit user action. SVG overlays use real YOLO frame boxes. The
 
 Pod logs, rollout status and pod events are accessible. The user's browser Console/Network history, authenticated workshop session and private gateway logs are not. For a browser-only failure, capture the URL path and first failed request's path/status/content type or Console error, excluding tokens and credentials.
 
-## Spatial status
+## Spatial cockpit and saved runs
 
-The main view reserves a 3D street viewport with orbit/zoom controls and the selected segment reference. Its grid is an empty viewer scaffold: no reconstructed buildings, camera poses, or invented 3D object positions are displayed. `GET /api/spatial` remains `connected: false`. Object highlighting currently operates on real 2D YOLO frame boxes.
+The visualizer adapts [UnfoldUnrest](https://github.com/exploring-curiosity/UnfoldUnrest) at revision `7a3163c74785d3942603587da6456adf297a90cc`. It renders the imported street surface, colored points, estimated object boxes, rider route and sightline rays. Use **Story**, **Follow rider**, **Whole street**, **Explore**, and **Points**; click an object to inspect it. All text uses local serif fonts. Three.js 0.160.0 is vendored; no frontend CDN, Node build or Mac reconstruction dependency is required. Attribution is in `UPSTREAM.txt`.
 
-`spatial.py` retains `SpatialImport { mesh_ref, segment_ids[], camera_poses? }`. Future poses include camera ID, existing segment ID, coordinate system, and a 4×4 transform. LingBot installation, inference, import routes, and reconstruction remain deferred until the user's codebase and pipeline are provided.
+The scene’s timeline is independent when its video is unlinked. A linked scene synchronizes registered archive clips, their YOLO overlays and the rider position using explicit offsets. No automatic 2D-to-3D object identity match is claimed. Missing maps preserve the archive player; missing WebGL uses the imported overhead image.
 
-## LingBot GPU feasibility — checked 2026-10-09
+A completed upstream bundle needs `run.json` (if available), `app/ride.json`, its overhead image, point-coordinate/color binaries, and referenced evidence images. MP4 files are ignored. Partial runs, invalid paths, excessive sizes, nonfinite coordinates and malformed timelines are rejected. The import accepts a directory, not an arbitrary archive or remote asset URL.
 
-**Assessment: plausible with a separately allocated CUDA worker; deployment onto the shared GPU host is not yet verified or available through the supplied access.** This is an inference from the observed access boundaries and the official installation requirements, not a GPU benchmark.
+Local development import:
 
-Observed environment:
+```bash
+.venv/bin/python tools/street-twin/spatial_import.py /path/to/run --local /tmp/streettwin-maps
+STREETTWIN_SPATIAL_DIR=/tmp/streettwin-maps .venv/bin/gunicorn --chdir tools/street-twin --workers 1 --threads 8 main:app
+```
 
-- The VM exposes no NVIDIA device files or NVIDIA PCI devices. StreetTwin's deployed container requests CPU and RAM only.
-- Shared YOLO `/healthz` returns HTTP 200 with `cuda_available: true` and `model_loaded: true`. Cosmos Reason and Embed each pass their models, ready, and live endpoints. Shared GPU inference is functioning.
-- Team pod inventory shows no GPU requests. Node inventory is denied by Kubernetes RBAC. Accessible health responses do not disclose GPU model, VRAM, free memory, driver version, compute capability, or spare allocation.
-- Existing credentials provide calls to the pre-running models. They do not provide a documented arbitrary-model deployment API or confirmed shell access/allocation on the GPU host. No GPU process or workload was installed, launched, or modified.
+Import into the deployed asset store:
 
-For ordinary street-video reconstruction, the relevant public project appears to be **LingBot-Map**; the imported codebase may differ. Its official guide uses Python 3.10, PyTorch 2.8.0 / torchvision 0.23.0 with CUDA 12.8. FlashInfer is recommended, with native SDPA fallback. CPU offload, fewer initial scale frames, and keyframe/window controls reduce memory pressure. The offline renderer adds Kaolin and compiled CUDA extensions. These are separate from StreetTwin's small CPU web container. [Official installation and memory guidance](https://github.com/Robbyant/lingbot-map#-installation).
+```bash
+bash tools/street-twin/with-runtime.sh .venv/bin/python tools/street-twin/spatial_import.py /path/to/run --s3
+```
 
-The published package manifest requires Python ≥3.10 and lists core and visualization dependencies. The imported pipeline's exact dependencies must be inspected rather than assuming that the web runtime or every README extra is sufficient. [Official package manifest](https://github.com/Robbyant/lingbot-map/blob/main/pyproject.toml).
+Pull the latest completed export from the teammate’s service:
 
-Once the codebase and GPU access are available, adapt in this order:
+```bash
+export RIDE_URL=https://your-teammate-tunnel
+bash tools/street-twin/with-runtime.sh .venv/bin/python tools/street-twin/ride_sync.py --s3
+```
 
-1. Verify the allocated GPU model/VRAM, driver compatibility, writable storage, CUDA/PyTorch build, and supported precision inside a dedicated worker. Endpoint health alone cannot establish these requirements. Do not alter the shared Cosmos/YOLO serving environments.
-2. Pin the supplied code revision and checkpoint. Start with a single existing NYC cycling parent chunk, decoded in chronological order with segment IDs and timestamps preserved. Use conservative frame sampling and bounded windows; measure actual peak VRAM and latency before growing the input. No new source video is needed.
-3. Establish a simple inference baseline before adding optional acceleration or rendering extensions. Compare the imported pipeline's full geometry output and real video timing. The official `gct_profile.py` uses synthetic inputs and can omit the point head, so its FPS is not a substitute for complete reconstruction profiling. [Official profiling code](https://github.com/Robbyant/lingbot-map/blob/main/gct_profile.py).
-4. Export geometry, confidence, intrinsics, and poses keyed to the same segment/frame times. Project YOLO detections through the matching depth/intrinsics/poses; moving objects need separate treatment from the static street. Preserve uncertainty and avoid interpreting uncalibrated coordinates as measured street dimensions. Cycling footage provides changing viewpoints; fixed-camera packs require separate evaluation.
-5. Serve the resulting mesh/point cloud and object associations to StreetTwin's reserved viewer through an isolated worker/API and derived-asset storage. Keep inference out of browser requests and the CPU app container. Treat this as future integration work, not an implemented pipeline.
+For authenticated service access, set `RIDE_TOKEN` outside the repository or put only the bearer token in `/config/ride.token`. The sync command uses GET `/api/manifest` and GET `/runs/{id}/{path}` only, verifies size/SHA-256, and excludes video, logs and model files. It does not submit or rerun reconstruction. Use `--run RUN_ID` to select a completed run. Existing imported maps survive tunnel outages and pod restarts. Repeat the command when new exports are ready; there is no unattended polling.
 
-The user will run LingBot on a separate machine and supply its visualizer codebase and tunnel. Shared GPU deployment is no longer the planned integration path. Once supplied, inspect the visualizer's export/API contract and adapt the interface around existing segment IDs before providing a spatial analysis tool to the recommender. No tunnel client, reconstruction, or spatial agent tool is connected yet.
+Team credentials cannot create S3 buckets in this environment. Deployment therefore stores assets under the app-only `street-twin/spatial/` prefix in the existing team database bucket, using S3 object operations only. No database tables or pipeline functions change, and no assets enter ingestion buckets. A separately provisioned `team-N-street-twin-spatial` bucket can instead be selected with `STREETTWIN_SPATIAL_BUCKET`. Runtime S3 credentials remain in the Kubernetes Secret. The supplied workshop VIP has a private certificate; the wrapper sets `STREETTWIN_S3_VERIFY=false` for that connection. Browser and ride-tunnel TLS verification remain enabled.
 
-## Corpus and re-ingest notes
+### Link a reconstruction to indexed footage
 
-Existing indexed sources only: Pack A (`i24_cam-1`), Pack D (`neighborhood_cam-1`), NYC cycling (`nyc_bike_gopro-1`), and other street packs. Both inspected demo sequences are NYC cycling footage. Archive counts are available live through `/api/stats` and can change as existing indexing completes.
+Provide a binding manifest only when the map was built from that exact archive source. Do not bind a teammate ride to an unrelated demo clip just because both show a city street.
 
-**No new videos uploaded. No re-ingest prompts used.** Current indexed captions support these diagnoses. The diagnosis prompt is in `bottlenecks.py`; it runs read-only synthesis, not re-ingestion. LingBot and spatial tool access remain deferred.
+```json
+{
+  "original_video": "s3://existing-archive/existing-parent.mp4",
+  "bindings": [
+    {
+      "segment_id": "existing_20_hex_id",
+      "scene_start_sec": 15,
+      "scene_end_sec": 20,
+      "clip_start_sec": 0
+    }
+  ]
+}
+```
+
+Replace the placeholders with canonical values from `/api/evidence/{segment_id}`. Pass `--bindings /path/to/bindings.json` to either import command. The importer checks the registered parent, interval lengths and nonoverlapping bindings, and obtains camera/location from VSS. Scene times refer to the reconstructed ride; clip times refer to the playable segment. Unlinked scenes remain explorable but cannot corroborate an archive recommendation.
+
+### Spatial reasoning
+
+`scene_id` is an optional analysis scope parameter. The scene hash participates in caching and is checked again before a job completes. After video establishes an obstruction and avoidance maneuver, Cosmos can select up to eight registered spatial fact IDs relevant to its cited clips. Recommendations add `spatial_refs[]`; reports link those estimates back to the map. Unknown facts, altered facts, unrelated clips or changed policy actions fail validation. A failed spatial selection leaves the video-grounded action available.
+
+Standing/moving/unknown comes from the imported object spread and sufficient observations while the rider passed. Standing cannot distinguish a parked car from a signal queue. Point placement and footprints use assumed camera-height scale. Crossing rays remain unverified visual estimates, excluded from recommendation admission because upstream documentation records false positives. The upstream legal-distance verdicts and cinematic video slowdown are not reused. No traffic speed, queue duration, delay, capacity or expected benefit is measured from this export.
+
+`SpatialScene` includes version/hash, assets, timed route, estimated objects, quality notes and explicit bindings. Public interfaces:
+
+| Route | Data |
+| --- | --- |
+| `/api/spatial/scenes` | Scene index and linkage status |
+| `/api/spatial/scenes/{id}` | Scene geometry metadata, quality and bindings |
+| `/api/spatial/scenes/{id}/assets/{asset_id}` | Registered binary/image asset |
+| `/api/spatial/context?scene_id=…&segment_id=…` | Bounded clip-linked facts |
+| `/api/spatial/context?scene_id=…&start=…&end=…&object_id=…` | Scene-only observations |
+
+Live LingBot inference remains external. Its future adapter must emit this saved-scene contract, explicit archive bindings, and calibrated poses/depth/intrinsics if 2D-to-3D identity matching is desired. This release does not install or invoke LingBot.
+
+## Connect another Codex window through MCP
+
+Install `mcp-requirements.txt`, then run this from the repository root on this VM:
+
+```bash
+STREETTWIN_ROOT="$(pwd)"
+codex mcp add street-twin -- bash "$STREETTWIN_ROOT/tools/street-twin/with-runtime.sh" "$STREETTWIN_ROOT/.venv/bin/python" "$STREETTWIN_ROOT/tools/street-twin/mcp_bridge.py"
+```
+
+The bridge runs locally beside Codex and calls the deployed app. The wrapper derives its API base from team configuration without putting secrets in the Codex command. Reopen the Codex window and check `/mcp`. [Official Codex MCP setup](https://developers.openai.com/codex/mcp).
+
+Tools: `search_clips`, `get_clip_evidence`, `get_detections`, `list_spatial_scenes`, `get_spatial_scene`, `get_spatial_context`, `get_analytics`, `get_recommendations`, `get_analysis_status`, and `get_policy_report`. YOLO frames are paginated; spatial context is capped at 80 objects. Full point clouds stay behind asset links. Recommendation reads can start/reuse inference jobs, but no tool writes to the archive, uploads media, deploys or starts reconstruction. A different machine must have this bridge installed and a reachable `STREETTWIN_API_BASE`; this release does not host a remote MCP transport.
+
+Suggested agent task: “Find an observed passage obstruction, inspect its clips and YOLO context, inspect spatial facts only if explicitly linked, and propose a policy/infrastructure action with segment and spatial references. Distinguish observed maneuvers from estimated geometry.”
+
+## Verification
+
+```bash
+.venv/bin/python -m unittest discover -s tools/street-twin/tests -v
+# Optional browser wiring check; uses temporary synthetic map data, never deployed.
+# Install Playwright and Chromium separately if they are absent.
+xvfb-run -a .venv/bin/python tools/street-twin/tests/browser_smoke.py
+```
+
+The browser check covers `/app/` assets, desktop/mobile WebGL, camera/timeline controls, report navigation and citations. Deployment uses server-side apply for large ConfigMaps, avoiding Kubernetes’ client annotation-size limit. Code/module ConfigMaps are versioned so an update does not partially overwrite the running app. For rollback, use the previous StreetTwin Deployment revision; imported S3 map assets persist.
+
+No re-ingest prompt was used for this update. No new video was uploaded.

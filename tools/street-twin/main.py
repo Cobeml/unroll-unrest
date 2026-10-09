@@ -209,7 +209,7 @@ def policy_page(review_id):
 def asset(name):
     if name in {'vendor/three.module.min.js','vendor/OrbitControls.js'}:
         return send_from_directory(ROOT, name)
-    if name not in {'app.js', 'cockpit.js', 'style.css', 'street-preview.jpg','bottleneck-preview.jpg'}:
+    if name not in {'app.js', 'cockpit.js', 'style.css', 'street-preview.jpg','bottleneck-preview.jpg','traffic-preview.jpg'}:
         return jsonify(error='Asset unavailable'), 404
     return send_from_directory(ROOT, name)
 

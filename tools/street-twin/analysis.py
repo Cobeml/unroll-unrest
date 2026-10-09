@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import re
 import secrets
 import threading
 import time
@@ -32,7 +33,7 @@ def context_from(args, metadata):
     filters_from(context,metadata)
     if context.get('demo') and context['demo'] not in DEMO_ANCHORS:raise BadFilter('Choose an existing demo preset.')
     if context.get('query') and not 3<=len(context['query'])<=500:raise BadFilter('Describe the scene in 3–500 characters.')
-    if context.get('scene_id') and not __import__('re').fullmatch(r'[A-Za-z0-9_-]{1,80}',context['scene_id']):raise BadFilter('Choose a valid saved map.')
+    if context.get('scene_id') and not re.fullmatch(r'[A-Za-z0-9_-]{1,80}',context['scene_id']):raise BadFilter('Choose a valid saved map.')
     return context
 
 

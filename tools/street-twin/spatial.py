@@ -66,19 +66,27 @@ def read_json(path):
 
 
 class SceneStore:
-    def __init__(self,root=None,bucket=None,client=None):
+    def __init__(self,root=None,bucket=None,client=None,prefix=None):
         self.root=Path(root or os.environ.get('STREETTWIN_SPATIAL_DIR',Path.home()/'.local/share/street-twin/spatial'))
         self.bucket=bucket or os.environ.get('STREETTWIN_SPATIAL_BUCKET')
+        self.prefix=prefix if prefix is not None else os.environ.get('STREETTWIN_SPATIAL_PREFIX','')
         self._client=client;self._cache=None;self._at=0;self.lock=threading.RLock()
-        if self.bucket and (not re.fullmatch(r'team-[0-9]+-street-twin-spatial',self.bucket)):
-            raise SpatialError('Use a dedicated StreetTwin map bucket.')
+        if self.bucket:
+            dedicated=bool(re.fullmatch(r'team-[0-9]+-street-twin-spatial',self.bucket))
+            app_prefix=bool(re.fullmatch(r'team-[0-9]+-vss-db',self.bucket)) and self.prefix=='street-twin/spatial/'
+            if not (dedicated or app_prefix):raise SpatialError('Use a dedicated map bucket or the isolated team database asset prefix.')
+        elif self.prefix:self.prefix=''
 
     @property
     def client(self):
         if self._client is None:
             import boto3
             from botocore.config import Config
-            self._client=boto3.client('s3',endpoint_url=os.environ['S3_ENDPOINT'],
+            verify=os.environ.get('STREETTWIN_S3_VERIFY','true').lower()!='false'
+            if not verify:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            self._client=boto3.client('s3',verify=verify,endpoint_url=os.environ['S3_ENDPOINT'],
                 aws_access_key_id=os.environ['ACCESS_KEY'],aws_secret_access_key=os.environ['SECRET_KEY'],
                 config=Config(signature_version='s3v4',s3={'addressing_style':'path'},connect_timeout=10,read_timeout=30,retries={'max_attempts':2}))
         return self._client
@@ -95,7 +103,7 @@ class SceneStore:
     def get(self,key):
         if self.bucket:
             try:
-                response=self.client.get_object(Bucket=self.bucket,Key=key)
+                response=self.client.get_object(Bucket=self.bucket,Key=self.prefix+key)
                 if response['ContentLength']>LIMIT:raise SpatialError('Map file exceeds size limit.')
                 return response['Body'].read()
             except SpatialError:raise
@@ -106,7 +114,7 @@ class SceneStore:
 
     def put(self,key,data,mime):
         if self.bucket:
-            self.client.put_object(Bucket=self.bucket,Key=key,Body=data,ContentType=mime)
+            self.client.put_object(Bucket=self.bucket,Key=self.prefix+key,Body=data,ContentType=mime)
         else:
             path=self.root/key;path.parent.mkdir(parents=True,exist_ok=True)
             temp=path.with_suffix(path.suffix+'.part');temp.write_bytes(data);temp.replace(path)

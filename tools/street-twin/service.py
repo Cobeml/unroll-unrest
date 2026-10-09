@@ -6,6 +6,8 @@ from recommendations import build_recommendations
 
 # Match discovered filenames, never construct deployment-specific S3 paths.
 DEMO_ANCHORS = {
+    'traffic':('20261008_072948_GOPR0130_chunk_0014_segment_002_of_006.mp4',
+               'Cyclist weaving between vehicles in slow city traffic'),
     'bottleneck':('20261008_074847_GX050001_chunk_0005_segment_004_of_006.mp4',
                   'Parked red sedan obstructs the riding path; rider maneuvers around it'),
     'passage':('20261008_072535_GOPR0130_chunk_0004_segment_005_of_006.mp4',

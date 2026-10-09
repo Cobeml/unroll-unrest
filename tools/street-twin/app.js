@@ -5,7 +5,7 @@ const time=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 const locationName=s=>({new_york:'New York',san_francisco:'San Francisco',nashville:'Nashville / I-24',neighborhood:'Neighborhood',toronto:'Toronto'}[s]||s);
 const colors={person:'#7bcbb7',bicycle:'#d6ed7c',car:'#90b9df',truck:'#e6c88b',bus:'#dfa6c4',motorcycle:'#b7cba5'};
 // First frame from this indexed segment only; never reuse it for other clips.
-const previews={'6c04f82de23dc760739a':'street-preview.jpg','7d023dd390c2a7baac0f':'bottleneck-preview.jpg'};
+const previews={'6c04f82de23dc760739a':'street-preview.jpg','7d023dd390c2a7baac0f':'bottleneck-preview.jpg','ef7c083c57cb1601f04f':'traffic-preview.jpg'};
 const state={clips:[],recommendations:[],selected:null,metadata:null,detections:null,highlight:'all',context:new URLSearchParams(location.search),operation:0,selection:0,policy:null,analysisController:null};
 const policyId=location.pathname.match(/\/policy\/([a-f0-9]{16})\/?$/)?.[1];
 function url(path){return new URL(path,document.baseURI);}
